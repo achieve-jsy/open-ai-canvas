@@ -59,6 +59,8 @@ const PluginsPage = lazy(() => import("@/pages/plugins"));
 const EagleLibraryPage = lazy(() => import("@/pages/plugins/eagle"));
 const TasksPage = lazy(() => import("@/pages/tasks"));
 const ProjectsPage = lazy(loadProjectsPage);
+const AdvertisingProjectsPage = lazy(() => import("@/pages/ad-projects"));
+const AdvertisingDetailPage = lazy(() => import("@/pages/ad-projects/detail"));
 const ProjectDetailPage = lazy(loadProjectDetailPage);
 const ProjectCreatePage = lazy(loadProjectCreatePage);
 const SettingsPage = lazy(() => import("@/pages/settings"));
@@ -150,6 +152,8 @@ export const router = createBrowserRouter([
                     </RequireAuth>
                 ),
             },
+            { path: "/ad-projects", element: <RequireAuth>{deferred(<AdvertisingProjectsPage />)}</RequireAuth> },
+            { path: "/ad-projects/:id", element: <RequireAuth>{deferred(<AdvertisingDetailPage />)}</RequireAuth> },
             { path: "/assets", element: <RequireAuth>{deferred(<AssetsPage />)}</RequireAuth> },
             { path: "/skills", element: <RequireAuth>{deferred(<SkillsPage />)}</RequireAuth> },
             { path: "/skills/:skillId/edit", element: <RequireAuth>{deferred(<SkillWorkbenchPage />)}</RequireAuth> },

@@ -46,6 +46,7 @@ function buildNav(features: FeatureAvailability): { groups: WorkspaceNavGroup[];
         {
             items: [
                 { ...toolItem("create", "/"), id: "home", title: "创作" },
+                { id: "ad-projects", title: "广告项目", icon: Video, to: "/ad-projects" },
                 ...(features.shortDramaEnabled ? [{ ...toolItem("projects", "/projects"), title: "短剧制作" }] : []),
                 { ...toolItem("canvas", "/canvas"), title: "自由画布" },
             ],
@@ -61,10 +62,7 @@ function buildNav(features: FeatureAvailability): { groups: WorkspaceNavGroup[];
         },
         {
             heading: "资产与历史",
-            items: [
-                { ...toolItem("assets", "/assets"), title: "资产" },
-                ...(features.taskCenterEnabled ? [{ id: "tasks", title: "创作历史", icon: ImageIcon, to: "/tasks" }] : []),
-            ],
+            items: [{ ...toolItem("assets", "/assets"), title: "资产" }, ...(features.taskCenterEnabled ? [{ id: "tasks", title: "创作历史", icon: ImageIcon, to: "/tasks" }] : [])],
         },
     ];
 
@@ -106,7 +104,9 @@ function WorkspaceSidebarProfile({ collapsed, user, onExpand, onCollapse }: { co
             <div className={cn("app-workspace-sidebar-profile-row", collapsed && "is-collapsed")}>
                 <Popover open={menuOpen} onOpenChange={setMenuOpen} trigger="click" placement="topLeft" arrow={false} rootClassName="workspace-account-popover" content={content}>
                     <button type="button" className={cn("app-workspace-sidebar-profile", collapsed && "is-collapsed")} aria-label="打开账户菜单" title={profileName}>
-                        <UserGroupAvatarRing><UserAvatar user={user} className="app-workspace-sidebar-profile-avatar" /></UserGroupAvatarRing>
+                        <UserGroupAvatarRing>
+                            <UserAvatar user={user} className="app-workspace-sidebar-profile-avatar" />
+                        </UserGroupAvatarRing>
                         {!collapsed ? (
                             <span className="app-workspace-sidebar-profile-copy">
                                 <strong>{profileName}</strong>

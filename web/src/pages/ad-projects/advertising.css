@@ -1,0 +1,76 @@
+/* Advertising workspace: existing semantic tokens, native labelled form controls. */
+.ad-workspace {
+    --ad-border: var(--border);
+}
+.ad-section {
+    padding: var(--space-4);
+    border: 1px solid var(--ad-border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    min-width: 0;
+}
+.ad-section > * + * {
+    margin-top: var(--space-4);
+}
+.ad-section h2 {
+    font-weight: 600;
+    font-size: var(--fs-heading);
+}
+.ad-section h3 {
+    font-weight: 600;
+}
+.ad-shot {
+    padding-block: var(--space-4);
+    border-top: 1px solid var(--ad-border);
+}
+.ad-shot > * + * {
+    margin-top: var(--space-3);
+}
+.ad-workspace label,
+.ad-form label {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--space-1) + var(--space-half));
+    min-width: 0;
+}
+.ad-workspace input:not([type="checkbox"]):not([type="file"]),
+.ad-workspace textarea {
+    width: 100%;
+    min-width: 0;
+    padding: calc(var(--space-2) + var(--space-half));
+    border: 1px solid var(--ad-border);
+    border-radius: var(--r-sm);
+    background: var(--background);
+    color: var(--foreground);
+}
+.ad-workspace textarea {
+    resize: vertical;
+}
+.ad-workspace button:not(.ant-btn):not(.ant-modal-close) {
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--ad-border);
+    border-radius: var(--r-sm);
+}
+.ad-workspace button,
+.ad-workspace input[type="file"] {
+    cursor: pointer;
+}
+.ad-workspace button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+.ad-workspace :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+}
+.ad-workspace .ad-check {
+    flex-direction: row;
+    align-items: center;
+    overflow-wrap: anywhere;
+    min-height: 2.75rem;
+}
+.ad-workspace [role="alert"] {
+    color: var(--destructive);
+    overflow-wrap: anywhere;
+}
