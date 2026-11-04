@@ -48,7 +48,7 @@ func TestAdvertisingProjectPostgres(t *testing.T) {
 	for _, check := range []struct {
 		name string
 		run  func(*testing.T, *Service, *gorm.DB)
-	}{{"lifecycle", checkAdvertisingProjectLifecycle}, {"concurrent", checkAdvertisingProjectConcurrentSave}, {"delete-admission-lock", checkAdvertisingDeleteAdmissionLock}} {
+	}{{"lifecycle", checkAdvertisingProjectLifecycle}, {"concurrent", checkAdvertisingProjectConcurrentSave}, {"delete-admission-lock", checkAdvertisingDeleteAdmissionLock}, {"bind-delete-race", checkAdvertisingBindDeleteRace}} {
 		t.Run(check.name, func(t *testing.T) {
 			admin, err := database.Open(database.Config{Driver: "postgres", DSN: dsn})
 			if err != nil {
@@ -481,6 +481,11 @@ func checkAdvertisingProjectConcurrentSave(t *testing.T, svc *Service, db *gorm.
 	for err := range results {
 		if err == nil {
 			success++
+		} else {
+			var appErr *AppError
+			if !errors.As(err, &appErr) || appErr.Status != 409 {
+				t.Fatalf("loser must get revision conflict: %v", err)
+			}
 		}
 	}
 	if success != 1 {

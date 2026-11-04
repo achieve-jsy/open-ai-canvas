@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,7 +28,10 @@ func checkAdvertisingDeleteAdmissionLock(t *testing.T, svc *Service, db *gorm.DB
 			}
 			close(held)
 			<-release
-			return nil
+			if err := repo.DeleteAdvertisingContent(ad.Project.ID); err != nil {
+				return err
+			}
+			return deleteProjectWithRepository(repo, "owner", ad.Project.ID)
 		})
 	}()
 	select {
@@ -39,18 +43,100 @@ func checkAdvertisingDeleteAdmissionLock(t *testing.T, svc *Service, db *gorm.DB
 		<-done
 		t.Fatal("delete lock timed out")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	insertErr := db.WithContext(ctx).Create(&model.Task{ID: "late", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusQueued}).Error
-	cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	admitted := make(chan error, 1)
+	go func() {
+		admitted <- repository.New(db.WithContext(ctx)).CreateTaskWithActiveLimit(&model.Task{ID: "late", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusQueued}, 100)
+	}()
+	select {
+	case err := <-admitted:
+		close(release)
+		<-done
+		t.Fatalf("admission did not wait: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if insertErr == nil {
-		t.Fatal("task insertion crossed final deletion check")
+	if err := <-admitted; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("admission after deletion: %v", err)
 	}
-	if err := db.Create(&model.Task{ID: "after", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusQueued}).Error; err != nil {
-		t.Fatal("lock not released", err)
+	var count int64
+	if err := db.Model(&model.Task{}).Where("id = ?", "late").Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("orphan task persisted: %d %v", count, err)
+	}
+}
+
+func TestAdvertisingAdmissionAfterDelete(t *testing.T) {
+	svc, db := advertisingTestService(t)
+	ad, err := svc.CreateAdvertisingProject("owner", AdvertisingCreateRequest{Name: "Deleted ad"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := model.Task{ID: "retry-ad", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusFailed}
+	if err := db.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteAdvertisingProject("owner", ad.Project.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.repo.CreateTaskWithActiveLimit(&model.Task{ID: "late-free", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusQueued}, 100); err == nil {
+		t.Error("deleted ad admitted free task")
+	}
+	if err := svc.repo.CreateTaskWithCreditReservation(&model.Task{ID: "late-paid", UserID: "owner", ProjectID: ad.Project.ID, Status: model.TaskStatusQueued}, &model.BillingOrder{ID: "late-order", UserID: "owner", TaskID: "late-paid"}, 100); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("paid task did not reject deleted scope before billing: %v", err)
+	}
+	if _, err := svc.repo.RetryTaskWithBilling("owner", &task, nil, 100); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("retry accepted stale scope: %v", err)
+	}
+	if err := svc.repo.CreateTaskWithActiveLimit(&model.Task{ID: "local-task", UserID: "owner", ProjectID: "local-only-canvas", Status: model.TaskStatusQueued}, 100); err != nil {
+		t.Fatal("local canvas compatibility", err)
+	}
+}
+
+func TestAdvertisingBindDeleteRace(t *testing.T) {
+	svc, db := advertisingTestService(t)
+	checkAdvertisingBindDeleteRace(t, svc, db)
+}
+func checkAdvertisingBindDeleteRace(t *testing.T, svc *Service, db *gorm.DB) {
+	if err := db.Create(&model.Resource{ID: "race-resource", UserID: "owner", Status: model.ResourceStatusReady, MimeType: "image/png"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	ad, err := svc.CreateAdvertisingProject("owner", AdvertisingCreateRequest{Name: "Race"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := ad.Draft
+	d.ProductResourceIDs = []string{"race-resource"}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var saveErr, deleteErr error
+	go func() {
+		defer wg.Done()
+		<-start
+		_, saveErr = svc.SaveAdvertisingProject("owner", ad.Project.ID, AdvertisingSaveRequest{Name: "Race", ExpectedRevision: 1, Draft: d})
+	}()
+	go func() { defer wg.Done(); <-start; deleteErr = svc.repo.DeleteResource("owner", "race-resource") }()
+	close(start)
+	wg.Wait()
+	if saveErr == nil && deleteErr == nil {
+		t.Fatal("binding and deletion both succeeded")
+	}
+	var refs, resources int64
+	if err := db.Model(&model.AdvertisingResourceReference{}).Where("resource_id = ?", "race-resource").Count(&refs).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&model.Resource{}).Where("id = ?", "race-resource").Count(&resources).Error; err != nil {
+		t.Fatal(err)
+	}
+	if refs > 0 && resources != 1 {
+		t.Fatal("committed reference lost its resource")
+	}
+	if saveErr == nil && refs != 1 {
+		t.Fatal("successful save has no reference")
 	}
 }
 

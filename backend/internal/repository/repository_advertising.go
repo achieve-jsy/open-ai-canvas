@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,6 +15,27 @@ import (
 const AdvertisingResourceReferenceKind = "广告项目"
 
 var ErrAdvertisingResourceReferenced = errors.New("资源仍被广告草稿或确认版本引用")
+
+// Advertising IDs reserve ad_ so deleted server projects cannot be mistaken for
+// arbitrary local-only canvas scopes. This runs before billing in the admission transaction.
+func (r *Repository) requireAdvertisingTaskScope(task *model.Task) error {
+	if !strings.HasPrefix(task.ProjectID, "ad_") {
+		return nil
+	}
+	if r.Dialect() == "postgres" {
+		// Match the INSERT lock before reading scope; a waiting admission must re-read
+		// after deletion commits, rather than validate first and insert a stale scope later.
+		if err := r.db.Exec("LOCK TABLE tasks IN ROW EXCLUSIVE MODE").Error; err != nil {
+			return err
+		}
+	} else if r.Dialect() == "sqlite" {
+		if err := r.db.Exec("UPDATE tasks SET project_id = project_id WHERE 1 = 0").Error; err != nil {
+			return err
+		}
+	}
+	_, err := r.AdvertisingProjectForUser(task.UserID, task.ProjectID)
+	return err
+}
 
 // GuardAdvertisingDeletion runs inside the advertising transaction before removing references.
 func (r *Repository) GuardAdvertisingDeletion(userID, id string) (err error) {

@@ -191,7 +191,7 @@ func (s *Service) CreateAdvertisingProject(userID string, req AdvertisingCreateR
 		return AdvertisingDetail{}, err
 	}
 	now := time.Now()
-	id := newID()
+	id := "ad_" + newID()
 	var detail AdvertisingDetail
 	err = s.repo.Transaction(func(repo *repository.Repository) error {
 		if _, err := advertisingResources(repo, userID, draft, true); err != nil {

@@ -158,6 +158,7 @@ test("advertising form edits stable shots and explicit seconds without discardin
             });
             await settle();
             expect((host.querySelector('[aria-label="商品名称"]') as any).value).toBe("未保存");
+            server = { ...server, revision: 10, draft: { ...server.draft, brief: { ...server.draft.brief, productName: "Updated while away" } } };
             await act(() => root.render(<div />));
             await act(() =>
                 root.render(
@@ -167,7 +168,7 @@ test("advertising form edits stable shots and explicit seconds without discardin
                 ),
             );
             await settle();
-            expect((host.querySelector('[aria-label="商品名称"]') as any).value).toBe("我的商品");
+            expect((host.querySelector('[aria-label="商品名称"]') as any).value).toBe("Updated while away");
             oldConfirmation = true;
             server = { ...server, revision: 20, project: { ...server.project, name: "Newer server" }, draft: { ...server.draft, brief: { ...server.draft.brief, productName: "Newer product" } }, latestConfirmedRevisionId: "v2" };
             await act(() => pageButton("确认脚本").click());
@@ -185,6 +186,17 @@ test("advertising form edits stable shots and explicit seconds without discardin
             await choose();
             expect(host.textContent).toContain("仅本地，尚未可绑定");
             expect(server.draft.productResourceIds).toEqual([]);
+            uploadResult = { storageKey: "resource:bound", mimeType: "image/png" };
+            await choose();
+            await act(() => pageButton("添加镜头").click());
+            const reference = host.querySelector('input[type="checkbox"]')!;
+            await act(() => reference.click());
+            await act(() => pageButton("移除绑定").click());
+            expect(host.textContent).toContain("请先在镜头中取消引用");
+            expect(host.querySelector('input[type="checkbox"]')?.checked).toBe(true);
+            await act(() => reference.click());
+            await act(() => pageButton("移除绑定").click());
+            expect(host.querySelector('a[href*="bound"]')).toBeNull();
             uploadResult = "wait";
             await choose();
             await act(() => {

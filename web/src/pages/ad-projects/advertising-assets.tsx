@@ -48,7 +48,13 @@ export function AdvertisingAssets({ value, onChange, resources, disabled, onBusy
         }
         const next = { ...v, [target]: v[target].filter((r) => r !== id) };
         const remaining = new Set([...next.productResourceIds, ...next.additionalResourceIds]);
-        onChange({ ...next, shots: next.shots.map((s) => ({ ...s, referenceResourceIds: s.referenceResourceIds.filter((r) => remaining.has(r)) })) });
+        const linked = v.shots.flatMap((s, index) => (s.referenceResourceIds.includes(id) ? [index + 1] : []));
+        if (!remaining.has(id) && linked.length) {
+            setError("请先在镜头中取消引用：" + linked.join("、"));
+            return;
+        }
+        setError("");
+        onChange(next);
     };
     const upload = async (target: Pool, file?: File) => {
         if (!file || busy || disabled) return;

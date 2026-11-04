@@ -52,10 +52,10 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
         setConflict(false);
         client.setQueryData(key, data);
     };
-    useEffect(() => {
-        if (query.data && !saved) adopt(query.data);
-    }, [query.data, saved]);
     const dirty = !!saved && !!draft && (name !== saved.project.name || JSON.stringify(draft) !== JSON.stringify(saved.draft));
+    useEffect(() => {
+        if (query.data && query.data !== saved && !dirty && !busy && !uploading && !conflict && (!saved || query.data.revision >= saved.revision)) adopt(query.data);
+    }, [query.data, saved, dirty, busy, uploading, conflict]);
     const guard = dirty || busy || uploading;
     const blocker = useBlocker(guard);
     useEffect(() => {
@@ -69,6 +69,13 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
         return () => window.removeEventListener("beforeunload", unload);
     }, [guard]);
     const revisions = useQuery({ queryKey: [...key, "revisions", page], queryFn: ({ signal }) => api.listAdvertisingRevisions(id, page, 20, signal), enabled: !!saved, retry: false });
+    const latest = useQuery({
+        queryKey: [...key, "history", saved?.latestConfirmedRevisionId],
+        queryFn: ({ signal }) => api.getAdvertisingRevision(id, saved!.latestConfirmedRevisionId!, signal),
+        enabled: !!saved?.latestConfirmedRevisionId,
+        retry: false,
+    });
+    const differsFromConfirmed = !!latest.data && (name !== latest.data.snapshot.name || JSON.stringify(draft) !== JSON.stringify(latest.data.snapshot.draft));
     const history = useQuery({ queryKey: [...key, "history", historyId], queryFn: ({ signal }) => api.getAdvertisingRevision(id, historyId, signal), enabled: !!historyId, retry: false });
     const readRemote = async () => {
         try {
@@ -188,6 +195,8 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
                     <section className="ad-section">
                         <h2>确认历史</h2>
                         <p>确认快照只读，不包含临时签名URL。</p>
+                        {differsFromConfirmed && <p role="status">当前草稿与最新确认版本不同；历史确认仍然有效。</p>}
+                        {latest.error && <p role="alert">暂时无法比较最新确认版本，请稍后重试。</p>}
                         {revisions.error ? (
                             <p role="alert">{String(revisions.error)}</p>
                         ) : revisions.data?.items.length === 0 ? (
