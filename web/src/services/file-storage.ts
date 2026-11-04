@@ -2,6 +2,7 @@ import localforage from "localforage";
 import { nanoid } from "nanoid";
 
 import { getActiveUserScope } from "@/lib/user-scope";
+import { loadRasterImage } from "@/lib/image-raster";
 import { captureVideoPoster, detectVideoAudioTrackFromBlob } from "@/lib/video-poster";
 import { getResourceAccess, resolveResourceAccessURL, resourceFileUrl, resourceIdFromStorageKey, resourceStorageKey, ResourceUploadError, uploadResourceFile, type ResourceAccessVariant } from "@/services/api/resources";
 import { uploadImage, type UploadedImage } from "@/services/image-storage";
@@ -62,6 +63,9 @@ export async function uploadMediaFile(input: Blob, prefix = "file", onProgress?:
         let meta: { width?: number; height?: number; durationMs?: number; hasAudio?: boolean };
         if (captured) {
             meta = { width: captured.width, height: captured.height, durationMs: captured.durationMs, hasAudio: resolvedHasAudio };
+        } else if (blob.type.startsWith("image/")) {
+            const image = await loadRasterImage(previewUrl);
+            meta = { width: image.naturalWidth, height: image.naturalHeight };
         } else if (blob.type.startsWith("audio/")) {
             try {
                 meta = await readAudioMeta(previewUrl);
