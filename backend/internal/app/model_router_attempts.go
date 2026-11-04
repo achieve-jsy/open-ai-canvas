@@ -168,6 +168,13 @@ func (s *Service) routedModelForTaskSelection(task *model.Task) (*RoutedModel, e
 }
 
 func (s *Service) switchTaskToNextRoute(task *model.Task, attempts []model.RouteAttempt) (*model.RouteAttempt, error) {
+	advertising, err := s.repo.IsAdvertisingGenerationTask(task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if advertising {
+		return nil, advertisingConflict("approval_required", "广告任务不自动重新生成，请重新报价确认")
+	}
 	decrypted, err := s.decryptTaskInputJSON(task.InputJSON)
 	if err != nil {
 		return nil, err

@@ -39,6 +39,13 @@ func (w *taskLifecycleCoordinator) retryTask(userID string, id string) (*model.T
 	if err != nil {
 		return nil, err
 	}
+	advertising, err := s.repo.IsAdvertisingGenerationTask(task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if advertising {
+		return nil, advertisingConflict("approval_required", "广告重做需要重新报价并确认费用")
+	}
 	if task.MediaRecoveryJSON != "" {
 		return nil, BadAuthRequest("作品已生成，请使用重试保存，不要重复生成")
 	}

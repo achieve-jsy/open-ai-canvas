@@ -118,6 +118,36 @@
         },
         "parameters": [
           {
+            "name": "audioVoice",
+            "type": "string",
+            "mapping": "voice",
+            "values": [
+              "alloy",
+              "echo",
+              "fable",
+              "onyx",
+              "nova",
+              "shimmer"
+            ],
+            "description": "TTS基础音色。"
+          },
+          {
+            "name": "audioFormat",
+            "type": "string",
+            "mapping": "response_format",
+            "values": [
+              "mp3",
+              "wav"
+            ],
+            "description": "旁白输出格式。"
+          },
+          {
+            "name": "audioSpeed",
+            "type": "number",
+            "mapping": "speed",
+            "description": "语速，广告首版固定1。"
+          },
+          {
             "name": "model",
             "type": "string",
             "required": true,

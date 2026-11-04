@@ -8,6 +8,46 @@ import (
 	"yingce/backend/internal/model"
 )
 
+func (r *Repository) IsAdvertisingGenerationTask(taskID string) (bool, error) {
+	var n int64
+	err := r.db.Model(&model.AdvertisingSubmission{}).Where("task_id = ?", taskID).Count(&n).Error
+	return n > 0, err
+}
+
+func (r *Repository) AdvertisingSubmission(productionID, id string) (*model.AdvertisingSubmission, error) {
+	var row model.AdvertisingSubmission
+	err := r.db.Where("production_id = ? AND id = ?", productionID, id).First(&row).Error
+	return &row, err
+}
+func (r *Repository) AdvertisingSubmissionForOperation(productionID, key string) (*model.AdvertisingSubmission, error) {
+	var row model.AdvertisingSubmission
+	err := r.db.Where("production_id = ? AND client_operation_id = ?", productionID, key).First(&row).Error
+	return &row, err
+}
+func (r *Repository) CreateAdvertisingSubmission(row *model.AdvertisingSubmission) error {
+	return r.db.Omit(clause.Associations).Create(row).Error
+}
+func (r *Repository) ApproveAdvertisingSubmission(id, taskID string, at time.Time) error {
+	result := r.db.Model(&model.AdvertisingSubmission{}).Where("id = ? AND task_id IS NULL", id).Updates(map[string]any{"task_id": taskID, "approved_at": at})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrAdvertisingProductionConflict
+	}
+	return nil
+}
+func (r *Repository) AdvertisingSubmissions(productionID string, page, size int) ([]model.AdvertisingSubmission, int64, error) {
+	rows := []model.AdvertisingSubmission{}
+	var total int64
+	q := r.db.Model(&model.AdvertisingSubmission{}).Where("production_id = ?", productionID)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.Order("created_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&rows).Error
+	return rows, total, err
+}
+
 var ErrAdvertisingProductionConflict = errors.New("advertising production revision conflict")
 
 func (r *Repository) AdvertisingProductionForUser(userID, projectID, id string) (*model.AdvertisingProduction, error) {

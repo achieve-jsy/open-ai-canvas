@@ -89,6 +89,15 @@ func executeIdempotentProtocolCreate(ctx context.Context, input canvasGeneration
 	if idempotent {
 		attempts = idempotentCreateAttempts
 	}
+	if metadata, ok := ctx.Value(providerAnalyticsKey{}).(providerAnalyticsContext); ok && metadata.Service != nil && metadata.TaskID != "" {
+		advertising, err := metadata.Service.repo.IsAdvertisingGenerationTask(metadata.TaskID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if advertising {
+			attempts = 1
+		}
+	}
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
 		body, streamed, err := executeProtocolCreateRequest(withProviderRequestKind(ctx, "create"), input, spec)

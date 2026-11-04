@@ -28,6 +28,9 @@ type taskAdmission struct {
 // 这是常规模型生成任务的写入口：客户端只提交创作意图，模型、渠道、协议和计价信息必须由服务端目录重新解析，
 // 以保证“可展示的模型”与“实际执行及扣费的模型”来自同一份有效配置。
 func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*model.Task, error) {
+	if strings.HasPrefix(req.ProjectID, "ad_") && req.advertisingAdmission == nil {
+		return nil, advertisingConflict("approval_required", "广告生成必须先报价并确认费用")
+	}
 	if req.admission == nil && (strings.HasPrefix(req.Operation, "cloud_agent") || req.Input["cloudAgent"] != nil) {
 		return nil, BadAuthRequest("Agent 任务必须通过 Agent 接口创建")
 	}
