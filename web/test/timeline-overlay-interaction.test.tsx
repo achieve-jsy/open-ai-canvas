@@ -1,8 +1,16 @@
 import { expect, test } from "bun:test";
 import { Window } from "happy-dom";
+import { spawnSync } from "node:child_process";
 import type { TimelineClip } from "../src/types/timeline";
 
 test("native overlay controls edit text, placement and Logo without losing saved fields", async () => {
+    // React caches DOM capability at import time; isolate from SSR tests in the full suite.
+    if (!process.env.CANVAS_OVERLAY_DOM_CHECK) {
+        const child = spawnSync(process.execPath, ["test", import.meta.path], { env: { ...process.env, CANVAS_OVERLAY_DOM_CHECK: "1" }, encoding: "utf8", timeout: 20000 });
+        expect(child.stderr + child.stdout).not.toContain("(fail)");
+        expect(child.status).toBe(0);
+        return;
+    }
     const dom = new Window({ url: "http://localhost" });
     const originals = new Map<string, PropertyDescriptor | undefined>();
     for (const [key, value] of Object.entries({ window: dom, document: dom.document, navigator: dom.navigator, HTMLElement: dom.HTMLElement, Node: dom.Node, IS_REACT_ACT_ENVIRONMENT: true })) {
