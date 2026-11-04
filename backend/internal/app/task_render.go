@@ -50,6 +50,9 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	if err != nil {
 		return w.failTimelineTask(task, "渲染失败", err.Error())
 	}
+	if err := prepareRenderOverlays(ctx, input.Timeline, &plan, workDir); err != nil {
+		return w.failTimelineTask(task, "渲染失败", err.Error())
+	}
 	plan.PropagateID = task.ID
 	for _, seg := range plan.Segments {
 		if seg.Source == nil || seg.Kind == "image" {
@@ -109,11 +112,13 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 			DurationMs:  durationMs,
 			SubtitleSRT: plan.SubtitleSRT,
 		},
-		Width:   outWidth,
-		Height:  outHeight,
-		Fit:     plan.Fit,
-		AIGC:    renderAIGCJSON(plan),
-		Sources: renderSourceRecords(plan),
+		Width:           outWidth,
+		Height:          outHeight,
+		Fit:             plan.Fit,
+		AIGC:            renderAIGCJSON(plan),
+		Sources:         renderSourceRecords(plan),
+		SubtitlesBurned: input.Timeline.Output != nil && input.Timeline.Output.BurnSubtitles && plan.SubtitleSRT != "" && plan.ASSPath != "",
+		OverlayCount:    renderOverlayCount(input.Timeline),
 	}
 	payload, err := json.Marshal(result)
 	if err != nil {
@@ -136,6 +141,8 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 // 记录输出画幅、请求的适配模式、写入成片的 AIGC 标识，以及逐片段的来源与实际适配方式。
 // 读取方（如短剧成片）仍按 timelineRenderResult 解码，新增字段对其透明。
 type timelineRenderOutput struct {
+	SubtitlesBurned bool `json:"subtitlesBurned"`
+	OverlayCount    int  `json:"overlayCount"`
 	timelineRenderResult
 	Width   int                  `json:"width"`
 	Height  int                  `json:"height"`
@@ -189,6 +196,9 @@ func materializeRenderSources(ctx context.Context, s *Service, userID string, pl
 	}
 	for i := range plan.AudioOverlays {
 		segments = append(segments, &plan.AudioOverlays[i])
+	}
+	for i := range plan.ImageOverlays {
+		segments = append(segments, &plan.ImageOverlays[i])
 	}
 	for _, seg := range segments {
 		resourceID, ok := mediaResourceID(seg.Clip)

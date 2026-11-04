@@ -66,10 +66,11 @@ func TestBuildRenderPlanSkipsHiddenTrack(t *testing.T) {
 func TestBuildRenderSubtitleSRT(t *testing.T) {
 	project := renderProject{
 		Version: 2,
+		Tracks:  []renderTrack{{ID: "sub", Kind: "subtitle"}},
 		Clips: []renderClip{
-			{ID: "sub-b", Kind: "subtitle", StartMs: 2000, DurationMs: 1000, Text: "第二条"},
-			{ID: "sub-a", Kind: "subtitle", StartMs: 0, DurationMs: 1000, Text: "第一条"},
-			{ID: "sub-blank", Kind: "subtitle", StartMs: 5000, DurationMs: 1000, Text: "   "},
+			{ID: "sub-b", Kind: "subtitle", TrackID: "sub", StartMs: 2000, DurationMs: 1000, Text: "第二条"},
+			{ID: "sub-a", Kind: "subtitle", TrackID: "sub", StartMs: 0, DurationMs: 1000, Text: "第一条"},
+			{ID: "sub-blank", Kind: "subtitle", TrackID: "sub", StartMs: 5000, DurationMs: 1000, Text: "   "},
 		},
 	}
 	srt := buildRenderSubtitleSRT(project)

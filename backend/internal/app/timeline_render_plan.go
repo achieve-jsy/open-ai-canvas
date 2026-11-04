@@ -105,7 +105,9 @@ type renderSegment struct {
 }
 
 type renderPlan struct {
-	Segments []renderSegment
+	Segments      []renderSegment
+	ImageOverlays []renderSegment
+	ASSPath       string
 	// AudioOverlays 是音频轨上的独立片段（配音、音乐），在主序列拼接后按 startMs 混入。
 	AudioOverlays []renderSegment
 	SubtitleSRT   string
@@ -121,16 +123,26 @@ type renderPlan struct {
 // buildRenderPlan 挑选可见视频/图片轨片段按 startMs 排序，并把片段之间的
 // 空隙展开为黑场段，使渲染序列在时间轴上连续。
 func buildRenderPlan(project renderProject) renderPlan {
+	if project.Output != nil {
+		project.Width, project.Height, project.Fit = project.Output.Width, project.Output.Height, project.Output.Fit
+	}
+	var images []renderSegment
+	orders := map[string]int{}
 	visible := map[string]bool{}
 	muted := map[string]bool{}
 	for _, track := range project.Tracks {
 		visible[track.ID] = track.Visible == nil || *track.Visible
 		muted[track.ID] = track.Muted
+		orders[track.ID] = track.Order
 	}
 	clips := make([]renderClip, 0, len(project.Clips))
 	overlays := make([]renderSegment, 0)
 	for _, clip := range project.Clips {
 		if !visible[clip.TrackID] || clip.DurationMs <= 0 {
+			continue
+		}
+		if clip.Kind == "image" && clip.Overlay != nil {
+			images = append(images, renderSegment{Kind: "image", DurationMs: clip.DurationMs, Clip: clip})
 			continue
 		}
 		if clip.Kind == "audio" {
@@ -158,7 +170,14 @@ func buildRenderPlan(project renderProject) renderPlan {
 		return clips[i].StartMs < clips[j].StartMs
 	})
 
-	plan := renderPlan{SubtitleSRT: buildRenderSubtitleSRT(project), AudioOverlays: overlays, Width: renderWidth, Height: renderHeight, Fit: normalizeRenderFit(project.Fit)}
+	sort.SliceStable(images, func(i, j int) bool {
+		a, b := images[i].Clip, images[j].Clip
+		if orders[a.TrackID] != orders[b.TrackID] {
+			return orders[a.TrackID] < orders[b.TrackID]
+		}
+		return a.ID < b.ID
+	})
+	plan := renderPlan{ImageOverlays: images, SubtitleSRT: buildRenderSubtitleSRT(project), AudioOverlays: overlays, Width: renderWidth, Height: renderHeight, Fit: normalizeRenderFit(project.Fit)}
 	if project.Width >= 16 && project.Height >= 16 && project.Width <= 4096 && project.Height <= 4096 {
 		// libx264 yuv420p 要求偶数尺寸。
 		plan.Width, plan.Height = project.Width&^1, project.Height&^1
@@ -170,6 +189,10 @@ func buildRenderPlan(project renderProject) renderPlan {
 		}
 		plan.Segments = append(plan.Segments, renderSegment{Kind: clip.Kind, DurationMs: clip.DurationMs, Clip: clip})
 		cursor = clip.StartMs + clip.DurationMs
+	}
+	if enhancedRenderProject(project) && len(clips) > 0 && project.DurationMs > cursor {
+		gap := project.DurationMs - cursor
+		plan.Segments = append(plan.Segments, renderSegment{Kind: "gap", DurationMs: gap, GapMs: gap})
 	}
 	for _, seg := range plan.Segments {
 		if _, ok := mediaResourceID(seg.Clip); ok {
@@ -196,7 +219,7 @@ func mediaResourceID(clip renderClip) (string, bool) {
 func buildRenderSubtitleSRT(project renderProject) string {
 	subtitle := make([]renderClip, 0, len(project.Clips))
 	for _, clip := range project.Clips {
-		if clip.Kind != "subtitle" || strings.TrimSpace(clip.Text) == "" || clip.DurationMs <= 0 {
+		if !renderClipVisible(project, clip) || clip.Kind != "subtitle" || strings.TrimSpace(clip.Text) == "" || clip.DurationMs <= 0 {
 			continue
 		}
 		subtitle = append(subtitle, clip)
@@ -276,6 +299,10 @@ func buildRenderFFmpegArgs(plan renderPlan, target string) []string {
 		overlays = append(overlays, overlay)
 	}
 
+	imageBase := overlayBase + len(overlays)
+	for _, image := range plan.ImageOverlays {
+		args = append(args, "-loop", "1", "-t", fmt.Sprintf("%.3f", planTotalSeconds(plan)), "-i", image.Source.Path)
+	}
 	filters := make([]string, 0, len(plan.Segments)*2+len(overlays)+2)
 	labels := make([]string, 0, len(plan.Segments)*2)
 	for i, seg := range plan.Segments {
@@ -330,9 +357,27 @@ func buildRenderFFmpegArgs(plan renderPlan, target string) []string {
 		filters = append(filters, fmt.Sprintf("%samix=inputs=%d:duration=first:dropout_transition=0,volume=%d[aout]", mixInputs.String(), len(overlays)+1, len(overlays)+1))
 	}
 
+	videoOut := "vout"
+	for i, image := range plan.ImageOverlays {
+		o := image.Clip.Overlay
+		bw, bh := max(1, int(math.Round(o.Width*float64(width)))), max(1, int(math.Round(o.Height*float64(height))))
+		opacity := 1.
+		if o.Opacity != nil {
+			opacity = *o.Opacity
+		}
+		label := fmt.Sprintf("logo%d", i)
+		next := fmt.Sprintf("composite%d", i)
+		filters = append(filters, fmt.Sprintf("[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=%.4f,setsar=1,setpts=PTS-STARTPTS[%s]", imageBase+i, bw, bh, opacity, label))
+		filters = append(filters, fmt.Sprintf("[%s][%s]overlay=x=%.0f+(%d-overlay_w)/2:y=%.0f+(%d-overlay_h)/2:enable='gte(t,%.3f)*lt(t,%.3f)':eof_action=pass[%s]", videoOut, label, math.Round(o.X*float64(width)), bw, math.Round(o.Y*float64(height)), bh, float64(image.Clip.StartMs)/1000, float64(image.Clip.StartMs+image.Clip.DurationMs)/1000, next))
+		videoOut = next
+	}
+	if plan.ASSPath != "" {
+		filters = append(filters, fmt.Sprintf("[%s]ass=filename=overlay.ass[vtext]", videoOut))
+		videoOut = "vtext"
+	}
 	args = append(args,
 		"-filter_complex", strings.Join(filters, ";"),
-		"-map", "[vout]", "-map", "[aout]",
+		"-map", "["+videoOut+"]", "-map", "[aout]",
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
 		"-c:a", "aac", "-b:a", "128k",
 		// 不继承任何来源的容器元数据，只写本次合成的 AIGC 隐式标识与说明；use_metadata_tags 让 mp4
@@ -418,7 +463,7 @@ func renderSourceRecords(plan renderPlan) []renderSourceRecord {
 			Fit: renderSegmentFit(plan.Fit, seg.Source, width, height), AIGC: seg.Source.AIGC,
 		})
 	}
-	for _, overlay := range plan.AudioOverlays {
+	for _, overlay := range append(append([]renderSegment{}, plan.AudioOverlays...), plan.ImageOverlays...) {
 		if overlay.Source == nil {
 			continue
 		}
@@ -460,7 +505,7 @@ func renderAIGCLabel(plan renderPlan) aigcImplicitLabel {
 	for _, seg := range plan.Segments {
 		sources = append(sources, seg.Source)
 	}
-	for _, overlay := range plan.AudioOverlays {
+	for _, overlay := range append(append([]renderSegment{}, plan.AudioOverlays...), plan.ImageOverlays...) {
 		sources = append(sources, overlay.Source)
 	}
 	for _, source := range sources {
