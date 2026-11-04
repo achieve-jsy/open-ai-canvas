@@ -2,24 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-    AI_COMMAND_SCHEMA_VERSION,
-    AI_EDITING_OP_CATALOG,
-    AiCommandPlanError,
-    buildAiEditingSystemPrompt,
-    parseAiCommandPlan,
-    validateAiCommandBatch,
-} from "@/lib/timeline/ai-command-schema";
+import { AI_COMMAND_SCHEMA_VERSION, AI_EDITING_OP_CATALOG, AiCommandPlanError, buildAiEditingSystemPrompt, parseAiCommandPlan, validateAiCommandBatch } from "@/lib/timeline/ai-command-schema";
 import { EDITOR_COMMAND_OPS } from "@/lib/timeline/editor-commands";
 import type { TimelineProject } from "@/types/timeline";
 
-const commandsGolden = JSON.parse(
-    readFileSync(join(import.meta.dir, "fixtures/commands.golden.json"), "utf8"),
-) as { base: TimelineProject };
+const commandsGolden = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/commands.golden.json"), "utf8")) as { base: TimelineProject };
 
-const aiGolden = JSON.parse(
-    readFileSync(join(import.meta.dir, "fixtures/ai-commands.golden.json"), "utf8"),
-) as { schemaVersion: number; ops: string[] };
+const aiGolden = JSON.parse(readFileSync(join(import.meta.dir, "fixtures/ai-commands.golden.json"), "utf8")) as { schemaVersion: number; ops: string[] };
 
 describe("AI 命令 schema 黄金同步（防漂移）", () => {
     test("catalog op 集与 M2.1 命令注册表一致", () => {
@@ -29,7 +18,7 @@ describe("AI 命令 schema 黄金同步（防漂移）", () => {
     test("golden fixture op 集/版本与源码一致", () => {
         expect(aiGolden.schemaVersion).toBe(AI_COMMAND_SCHEMA_VERSION);
         expect(aiGolden.ops).toEqual([...EDITOR_COMMAND_OPS]);
-        expect(aiGolden.ops.length).toBe(12);
+        expect(aiGolden.ops.length).toBe(13);
     });
     test("catalog 每条契约含 op/desc/payload 三段", () => {
         for (const entry of AI_EDITING_OP_CATALOG) {

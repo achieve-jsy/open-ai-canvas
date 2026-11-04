@@ -1,3 +1,8 @@
+import { TimelineOverlayControls } from "./timeline-overlay-controls";
+import { resolveTimelineRenderSnapshot } from "@/lib/timeline/timeline-render-snapshot";
+import { createTimelineRenderTask, type TimelineRenderResult } from "@/services/api/timeline-tasks";
+import { waitForGenerationTask } from "@/services/api/task-center";
+import { resourceFileUrl } from "@/services/api/resources";
 import { App, Button, Dropdown, Input, InputNumber, Progress } from "antd";
 import { AppModal } from "@/components/ui/product/app-modal";
 import { Tooltip } from "@/components/ui/base/tooltip";
@@ -110,6 +115,7 @@ export function CanvasTimelineDialog({
     const draftDirtyRef = useRef(false);
     const [playheadMs, setPlayheadMs] = useState(0);
     const [zoomLevel, setZoomLevel] = useState(1);
+    const [renderTaskId, setRenderTaskId] = useState("");
     const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
     const [snapEnabled, setSnapEnabled] = useState(true);
     const [previewPlaying, setPreviewPlaying] = useState(false);
@@ -448,6 +454,19 @@ export function CanvasTimelineDialog({
 
     // 直连媒体（仅时间线作用域，不落画布）：素材库/项目资产/本地上传直接入轨。
     const addDirectMediaToTimeline = (media: TimelineDirectMedia) => {
+        if (media.kind === "image") {
+            const id = crypto.randomUUID();
+            applyDraft((p) => ({
+                ...p,
+                tracks: p.tracks.some((t) => t.id === "ad-logo") ? p.tracks : [...p.tracks, { id: "ad-logo", kind: "image", label: "Logo", order: p.tracks.length }],
+                clips: [
+                    ...p.clips,
+                    { id, nodeId: id, kind: "image", trackId: "ad-logo", startMs: playheadMs, durationMs: Math.max(100, Math.min(3000, p.durationMs - playheadMs)), directMedia: media, overlay: { x: 0.8, y: 0.05, width: 0.15, height: 0.1 } },
+                ],
+            }));
+            setSelectedClipId(id);
+            return;
+        }
         const kind = media.kind === "video" ? "video" : media.kind === "audio" ? "audio" : null;
         if (!kind) {
             message.info("图片/文本素材暂不支持直接入轨，请先在画布中添加节点");
@@ -562,11 +581,42 @@ export function CanvasTimelineDialog({
     const orderedVideoClips = getOrderedVideoClips(draft);
     const firstClipSize = orderedVideoClips[0] ? clipFrameSize(orderedVideoClips[0]) : null;
     const exportPresetOptions = timelineExportPresetOptions({ firstClipSize, dramaAspectRatio });
-    const exportSize = resolveTimelineExportSize(exportPreset, { firstClipSize, dramaAspectRatio });
+    const exportSize = draft.output ?? resolveTimelineExportSize(exportPreset, { firstClipSize, dramaAspectRatio });
     const exportFitLabel = timelineFitModeLabel(summarizeTimelineFitModes(orderedVideoClips.map(clipFrameSize), exportSize));
 
     // 组装导出：把当前草稿按片段顺序合成一个 MP4（导出下载与生成新片段共用），所有片段统一到所选导出规格。
-    const runExport = async (): Promise<TimelineExportResult> => {
+    const runExport = async (remote = true): Promise<TimelineExportResult> => {
+        if (remote) {
+            const snapshot = resolveTimelineRenderSnapshot({ ...draft, output: draft.output ?? { width: exportSize.width, height: exportSize.height, fit: "pad", burnSubtitles: true } }, (clip) => {
+                const n = nodes.find((n) => n.id === clip.nodeId);
+                return n ? { id: n.id, kind: clip.kind as TimelineDirectMedia["kind"], title: n.title || clip.id, storageKey: n.metadata?.storageKey } : undefined;
+            });
+            setExporting(true);
+            setExportPercent(0);
+            setExportDetail("提交服务端渲染…");
+            try {
+                const created = await createTimelineRenderTask({ timeline: snapshot });
+                setRenderTaskId(created.id);
+                const done = await waitForGenerationTask(created.id, {
+                    timeoutMs: 62 * 60 * 1000,
+                    intervalMs: 3000,
+                    onTaskUpdate: (t) => {
+                        setExportPercent(t.progress ?? 0);
+                        setExportDetail(t.stage || "渲染中");
+                    },
+                });
+                const result = JSON.parse(done.resultJson ?? "{}") as TimelineRenderResult;
+                if (!result.resourceId) throw new Error("渲染任务没有产物");
+                if (snapshot.output?.burnSubtitles && snapshot.clips.some((c) => c.kind === "subtitle" && c.text?.trim() && snapshot.tracks.find((t) => t.id === c.trackId)?.visible !== false) && !result.subtitlesBurned)
+                    throw new Error("服务端未烧录字幕");
+                const response = await fetch(resourceFileUrl(result.resourceId), { credentials: "include" });
+                if (!response.ok) throw new Error("读取成片失败，请到任务中心下载");
+                return { blob: await response.blob(), subtitlesBurned: result.subtitlesBurned ?? false, warnings: [] };
+            } finally {
+                setExporting(false);
+                setExportDetail("");
+            }
+        }
         const videoClips = draft.clips.filter((clip) => clip.kind === "video");
         if (!videoClips.length) throw new Error("时间线没有视频片段，无法导出");
         const sources: TimelineRenderSource[] = [];
@@ -627,11 +677,11 @@ export function CanvasTimelineDialog({
         });
     };
 
-    const handleExport = async () => {
+    const handleExport = async (remote = true) => {
         try {
             const srt = buildSubtitleSrt(getOrderedSubtitleClips(draft));
             const baseName = node.title || "成片";
-            const result = await runExport();
+            const result = await runExport(remote);
             saveAs(result.blob, baseName + ".mp4");
             reportExportResult(result, srt, baseName, "成片导出完成");
         } catch (error) {
@@ -667,7 +717,7 @@ export function CanvasTimelineDialog({
     const selectedMediaSourceDurationMs = selectedMediaClip?.sourceDurationMs;
     const selectedMediaMaxDurationMs = selectedMediaSourceDurationMs !== undefined ? Math.max(MIN_CLIP_DURATION_MS, selectedMediaSourceDurationMs) : 3_600_000;
     const selectedMediaMaxSourceStartMs = selectedMediaSourceDurationMs !== undefined ? Math.max(0, selectedMediaSourceDurationMs - (selectedMediaClip?.durationMs || 0)) : 3_600_000;
-    const hasVideoClips = draft.clips.some((clip) => clip.kind === "video");
+    const hasVideoClips = draft.clips.some((clip) => clip.kind === "video" || (clip.kind === "image" && !clip.overlay));
 
     // 时间线全局时间 → 视频节点本地时间：以该节点视频片段起点为 0 基准重建 SrtEntry。
     // source 传保存时校准后的时间线（normalized）：节点字幕已清空时直接回写空数组，
@@ -897,7 +947,7 @@ export function CanvasTimelineDialog({
                     <input
                         ref={uploadInputRef}
                         type="file"
-                        accept="video/*,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav"
+                        accept="video/*,image/png,image/jpeg,image/webp,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav"
                         multiple
                         className="hidden"
                         onChange={(event) => {
@@ -910,7 +960,7 @@ export function CanvasTimelineDialog({
                     </Button>
                     <div className="ml-auto flex items-center gap-2">
                         <Button size="small" type="primary" icon={<Clapperboard className="size-3.5" />} loading={exporting} disabled={!hasVideoClips} onClick={() => void handleExport()}>
-                            导出成片
+                            导出成片（服务端）
                         </Button>
                         <Button size="small" icon={<Film className="size-3.5" />} loading={exporting} disabled={!hasVideoClips} onClick={() => void handleCreateAssembledNode()}>
                             生成新片段
@@ -938,7 +988,49 @@ export function CanvasTimelineDialog({
                     </div>
                 ) : null}
 
-                <CanvasTimelinePreview clips={draft.clips} nodes={nodes} playheadMs={playheadMs} playing={previewPlaying} theme={theme} onTogglePlay={() => setPreviewPlaying((value) => !value)} onPlayheadChange={setPlayheadMs} />
+                <div className="flex flex-wrap items-center gap-2 border-b p-2 text-xs">
+                    <Button
+                        size="small"
+                        onClick={() => {
+                            setExportPreset("9:16");
+                            applyDraft((p) => ({ ...p, output: { width: 1080, height: 1920, fit: "pad", burnSubtitles: true } }));
+                        }}
+                    >
+                        广告竖屏 · 硬字幕
+                    </Button>
+                    <Button
+                        size="small"
+                        onClick={() => {
+                            const id = crypto.randomUUID();
+                            applyDraft((p) => ({
+                                ...p,
+                                tracks: p.tracks.some((t) => t.id === "ad-text") ? p.tracks : [...p.tracks, { id: "ad-text", kind: "text", label: "卖点文字", order: p.tracks.length }],
+                                clips: [...p.clips, { id, nodeId: id, kind: "text", trackId: "ad-text", startMs: playheadMs, durationMs: Math.max(100, Math.min(3000, p.durationMs - playheadMs)), text: "立即购买" }],
+                            }));
+                            setSelectedClipId(id);
+                        }}
+                    >
+                        添加卖点文字
+                    </Button>
+                    <Button size="small" disabled={exporting} onClick={() => void handleExport(false)}>
+                        普通时间线本地导出
+                    </Button>
+                    {renderTaskId && (
+                        <span>
+                            任务 {renderTaskId} ·{" "}
+                            <a href="/tasks" target="_blank" rel="noreferrer">
+                                任务中心
+                            </a>
+                            ；中断后先查询，勿重复提交。
+                        </span>
+                    )}
+                </div>
+                {draft.clips.find((c) => c.id === selectedClipId) && (
+                    <div className="max-h-64 overflow-y-auto">
+                        <TimelineOverlayControls clip={draft.clips.find((c) => c.id === selectedClipId)!} onChange={(c) => updateClip(c.id, c)} />
+                    </div>
+                )}
+                <CanvasTimelinePreview timeline={draft} clips={draft.clips} nodes={nodes} playheadMs={playheadMs} playing={previewPlaying} theme={theme} onTogglePlay={() => setPreviewPlaying((value) => !value)} onPlayheadChange={setPlayheadMs} />
 
                 <div className="flex min-h-0 flex-1">
                     <div className="flex w-44 shrink-0 flex-col border-r" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}>
@@ -1079,7 +1171,10 @@ export function CanvasTimelineDialog({
                         value={exportPreset}
                         disabled={exporting}
                         options={exportPresetOptions.map((option) => ({ value: option.value, label: option.label }))}
-                        onChange={(value: TimelineExportPreset) => setExportPreset(value)}
+                        onChange={(value: TimelineExportPreset) => {
+                            setExportPreset(value);
+                            applyDraft((p) => ({ ...p, output: { ...resolveTimelineExportSize(value, { firstClipSize, dramaAspectRatio }), fit: p.output?.fit ?? "pad", burnSubtitles: p.output?.burnSubtitles ?? true } }));
+                        }}
                     />
                     {exportFitLabel ? (
                         <Tooltip title="画面比例与导出规格相差不超过 3% 时裁切填满，否则等比缩放并补黑边">

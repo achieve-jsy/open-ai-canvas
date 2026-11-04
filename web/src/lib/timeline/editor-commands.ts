@@ -27,7 +27,7 @@ export type SplitClipPayload = { id: string; splitAtMs: number };
 export type RemoveClipPayload = { id: string };
 export type SetClipPropertyPayload = {
     id: string;
-    patch: Partial<Pick<TimelineClip, "title" | "text" | "volume" | "fadeInMs" | "fadeOutMs" | "subtitleEntryIndex">>;
+    patch: Partial<Pick<TimelineClip, "title" | "text" | "volume" | "fadeInMs" | "fadeOutMs" | "subtitleEntryIndex" | "overlay">>;
 };
 export type AddSubtitlePayload = { clip: TimelineClip };
 export type RemoveSubtitlePayload = { id: string };
@@ -49,20 +49,7 @@ export type RebuildSubtitleClipsPayload = {
     trackId?: string;
 };
 
-export const EDITOR_COMMAND_OPS = [
-    "addClip",
-    "moveClip",
-    "trimClip",
-    "splitClip",
-    "removeClip",
-    "setClipProperty",
-    "addSubtitle",
-    "removeSubtitle",
-    "rebuildSubtitleClips",
-    "addTrack",
-    "removeTrack",
-    "setTrackFlag",
-] as const;
+export const EDITOR_COMMAND_OPS = ["addClip", "moveClip", "trimClip", "splitClip", "removeClip", "setClipProperty", "addSubtitle", "removeSubtitle", "rebuildSubtitleClips", "addTrack", "removeTrack", "setTrackFlag", "setTimelineOutput"] as const;
 
 // ---------------------------------------------------------------------------
 // 校验辅助
@@ -81,6 +68,15 @@ function assertClipShape(op: string, clip: unknown): asserts clip is TimelineCli
     if (typeof c.nodeId !== "string" || c.nodeId.length === 0) fail(op, "clip.nodeId must be a non-empty string");
     if (typeof c.startMs !== "number" || !Number.isFinite(c.startMs) || c.startMs < 0) fail(op, "clip.startMs must be a non-negative finite number");
     if (typeof c.durationMs !== "number" || !Number.isFinite(c.durationMs) || c.durationMs <= 0) fail(op, "clip.durationMs must be a positive finite number");
+    const o = c.overlay;
+    if (o !== undefined) {
+        if (!o || !["image", "text"].includes(c.kind) || ![o.x, o.y, o.width, o.height].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1) || o.width <= 0 || o.height <= 0 || o.x + o.width > 1 || o.y + o.height > 1)
+            fail(op, "invalid overlay bounds");
+        if (o.opacity !== undefined && (!Number.isFinite(o.opacity) || o.opacity < 0 || o.opacity > 1)) fail(op, "invalid overlay opacity");
+        if (o.fontSize !== undefined && (!Number.isFinite(o.fontSize) || o.fontSize < 0.01 || o.fontSize > 0.1)) fail(op, "invalid overlay fontSize");
+        if ([o.color, o.background].some((v) => v !== undefined && (typeof v !== "string" || !/^#[0-9a-fA-F]{6}$/.test(v)))) fail(op, "invalid overlay color");
+        if (o.align !== undefined && !["left", "center", "right"].includes(o.align)) fail(op, "invalid overlay alignment");
+    }
 }
 
 function findTrackOrThrow(op: string, state: TimelineProject, trackId: string) {
@@ -122,7 +118,10 @@ function handleMoveClip(state: TimelineProject, payload: unknown): TimelineProje
     const clip = findClipOrThrow("moveClip", state, id);
     if (trackId !== undefined) findTrackOrThrow("moveClip", state, trackId);
     const moved = { ...clip, startMs, ...(trackId !== undefined ? { trackId } : {}) };
-    return withClips(state, state.clips.map((c) => (c.id === id ? moved : c)));
+    return withClips(
+        state,
+        state.clips.map((c) => (c.id === id ? moved : c)),
+    );
 }
 
 function handleTrimClip(state: TimelineProject, payload: unknown): TimelineProject {
@@ -150,7 +149,10 @@ function handleTrimClip(state: TimelineProject, payload: unknown): TimelineProje
         durationMs: nextDurationMs,
         sourceStartMs: nextSourceStartMs,
     };
-    return withClips(state, state.clips.map((c) => (c.id === id ? trimmed : c)));
+    return withClips(
+        state,
+        state.clips.map((c) => (c.id === id ? trimmed : c)),
+    );
 }
 
 function handleSplitClip(state: TimelineProject, payload: unknown): TimelineProject {
@@ -183,11 +185,14 @@ function handleRemoveClip(state: TimelineProject, payload: unknown): TimelinePro
     const { id } = payload as RemoveClipPayload;
     if (typeof id !== "string" || id.length === 0) fail("removeClip", "id must be a non-empty string");
     findClipOrThrow("removeClip", state, id);
-    return withClips(state, state.clips.filter((c) => c.id !== id));
+    return withClips(
+        state,
+        state.clips.filter((c) => c.id !== id),
+    );
 }
 
 /** setClipProperty 允许修改的属性白名单；结构字段（id/kind/nodeId/trackId/startMs/durationMs/...）由专门命令负责。 */
-const CLIP_PROPERTY_WHITELIST = new Set(["title", "text", "volume", "fadeInMs", "fadeOutMs", "subtitleEntryIndex"]);
+const CLIP_PROPERTY_WHITELIST = new Set(["title", "text", "volume", "fadeInMs", "fadeOutMs", "subtitleEntryIndex", "overlay"]);
 
 function handleSetClipProperty(state: TimelineProject, payload: unknown): TimelineProject {
     const { id, patch } = payload as SetClipPropertyPayload;
@@ -200,7 +205,11 @@ function handleSetClipProperty(state: TimelineProject, payload: unknown): Timeli
     findClipOrThrow("setClipProperty", state, id);
 
     const updated = { ...findClipOrThrow("setClipProperty", state, id), ...patch };
-    return withClips(state, state.clips.map((c) => (c.id === id ? updated : c)));
+    assertClipShape("setClipProperty", updated);
+    return withClips(
+        state,
+        state.clips.map((c) => (c.id === id ? updated : c)),
+    );
 }
 
 function handleAddSubtitle(state: TimelineProject, payload: unknown): TimelineProject {
@@ -216,7 +225,10 @@ function handleRemoveSubtitle(state: TimelineProject, payload: unknown): Timelin
     if (typeof id !== "string" || id.length === 0) fail("removeSubtitle", "id must be a non-empty string");
     const clip = findClipOrThrow("removeSubtitle", state, id);
     if (clip.kind !== "subtitle") fail("removeSubtitle", `clip "${id}" is not a subtitle clip`);
-    return withClips(state, state.clips.filter((c) => c.id !== id));
+    return withClips(
+        state,
+        state.clips.filter((c) => c.id !== id),
+    );
 }
 
 /** 轨道种类的基础标签；新增轨道 label = 基础标签 + 同种类现有轨道数 + 1。 */
@@ -263,7 +275,7 @@ function handleRemoveTrack(state: TimelineProject, payload: unknown): TimelinePr
 function handleSetTrackFlag(state: TimelineProject, payload: unknown): TimelineProject {
     const { trackId, flag, value } = payload as SetTrackFlagPayload;
     if (typeof trackId !== "string" || trackId.length === 0) fail("setTrackFlag", "trackId must be a non-empty string");
-    if (flag !== "visible" && flag !== "muted") fail("setTrackFlag", "flag must be \"visible\" or \"muted\"");
+    if (flag !== "visible" && flag !== "muted") fail("setTrackFlag", 'flag must be "visible" or "muted"');
     if (typeof value !== "boolean") fail("setTrackFlag", "value must be a boolean");
     findTrackOrThrow("setTrackFlag", state, trackId);
     return {
@@ -333,6 +345,27 @@ const BUILTIN_HANDLERS: ReadonlyArray<readonly [string, CommandHandler]> = [
     ["addTrack", handleAddTrack],
     ["removeTrack", handleRemoveTrack],
     ["setTrackFlag", handleSetTrackFlag],
+    [
+        "setTimelineOutput",
+        (state, payload) => {
+            const o = payload as NonNullable<TimelineProject["output"]>;
+            if (
+                !o ||
+                !Number.isInteger(o.width) ||
+                !Number.isInteger(o.height) ||
+                o.width < 16 ||
+                o.height < 16 ||
+                o.width > 1920 ||
+                o.height > 1920 ||
+                o.width % 2 ||
+                o.height % 2 ||
+                !["auto", "pad", "crop"].includes(o.fit) ||
+                typeof o.burnSubtitles !== "boolean"
+            )
+                fail("setTimelineOutput", "invalid output configuration");
+            return { ...state, output: { ...o } };
+        },
+    ],
     ["rebuildSubtitleClips", handleRebuildSubtitleClips],
 ];
 

@@ -4,7 +4,7 @@ export const FILMSTRIP_TILE_WIDTH = 64;
 
 export function getPreviewClipAtTime(project: TimelineProject, timeMs: number, selectedClipId?: string | null): TimelineClip | null {
     const hidden = new Set(project.tracks.filter((track) => track.visible === false).map((track) => track.id));
-    const contains = (clip: TimelineClip) => !hidden.has(clip.trackId) && clip.startMs <= timeMs && timeMs < clip.startMs + clip.durationMs;
+    const contains = (clip: TimelineClip) => !clip.overlay && !hidden.has(clip.trackId) && clip.startMs <= timeMs && timeMs < clip.startMs + clip.durationMs;
     const selected = project.clips.find((clip) => clip.id === selectedClipId && (clip.kind === "video" || clip.kind === "image") && contains(clip));
     return selected ?? project.clips.find((clip) => clip.kind === "video" && contains(clip)) ?? project.clips.find((clip) => clip.kind === "image" && contains(clip)) ?? null;
 }

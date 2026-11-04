@@ -1,6 +1,10 @@
 import type { TimelineClip, TimelineDirectMedia, TimelineProject } from "@/types/timeline";
 import { normalizeTimelineProject } from "./timeline-tracks";
 
+export function assertBrowserTimelineSupported(project: TimelineProject): void {
+    if (project.output || project.clips.some((clip) => clip.overlay || clip.kind === "text")) throw new Error("此时间线需要服务端导出");
+}
+
 /** Freeze uploaded resources for the worker; never silently drop a missing source. */
 export function resolveTimelineRenderSnapshot(project: TimelineProject, resolve: (clip: TimelineClip) => TimelineDirectMedia | undefined): TimelineProject {
     const snapshot = structuredClone(normalizeTimelineProject(project));

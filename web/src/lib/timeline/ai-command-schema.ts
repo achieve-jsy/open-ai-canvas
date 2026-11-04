@@ -11,9 +11,7 @@ export type AiCommandPlan = {
     commands: EditCommand[];
 };
 
-export type AiCommandBatchVerdict =
-    | { ok: true }
-    | { ok: false; index: number; op: string; error: string };
+export type AiCommandBatchVerdict = { ok: true } | { ok: false; index: number; op: string; error: string };
 
 export class AiCommandPlanError extends Error {
     constructor(message: string) {
@@ -156,7 +154,7 @@ export const AI_EDITING_OP_CATALOG: ReadonlyArray<{
     {
         op: "setClipProperty",
         desc: "修改片段属性（白名单）",
-        payload: "{ id, patch: { title? | text? | volume? | fadeInMs? | fadeOutMs? | subtitleEntryIndex? }（至少一项） }",
+        payload: "{ id, patch: { title? | text? | volume? | fadeInMs? | fadeOutMs? | subtitleEntryIndex? | overlay? }（至少一项；overlay使用0–1位置和尺寸） }",
     },
     {
         op: "addSubtitle",
@@ -188,6 +186,11 @@ export const AI_EDITING_OP_CATALOG: ReadonlyArray<{
         desc: "轨道开关",
         payload: "{ trackId, flag: visible|muted, value: boolean }",
     },
+    {
+        op: "setTimelineOutput",
+        desc: "设置服务端输出画幅和硬字幕",
+        payload: "{ width:16–1920偶数, height:16–1920偶数, fit:auto|pad|crop, burnSubtitles:boolean }",
+    },
 ];
 
 /** LLM 输出结构说明（追加到系统提示词，约束其为纯 JSON）。 */
@@ -204,9 +207,7 @@ const AI_EDITING_OUTPUT_EXAMPLE = `示例：
 
 /** 组装 AI 编辑系统提示词：时间线摘要、可用 op 契约和输出约束必须来自同一份注册表。 */
 export function buildAiEditingSystemPrompt(timelineSummary: string): string {
-    const catalogLines = AI_EDITING_OP_CATALOG.map(
-        (entry) => `- ${entry.op}：${entry.desc}。payload：${entry.payload}`,
-    ).join("\n");
+    const catalogLines = AI_EDITING_OP_CATALOG.map((entry) => `- ${entry.op}：${entry.desc}。payload：${entry.payload}`).join("\n");
     return [
         "你是影策视频剪辑工作台的 AI 剪辑助手。根据用户指令对时间线输出受约束的编辑命令 JSON。",
         "时间线当前状态：",

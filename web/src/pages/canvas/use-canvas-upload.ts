@@ -512,15 +512,20 @@ export function useCanvasUpload({ canvasId, domainProjectId, nodesRef, selectedN
     // 时间线专用：把本地音视频文件上传为直连媒体（仅时间线作用域，不创建画布节点），返回媒体描述数组。
     const uploadTimelineMedia = useCallback(
         async (files: File[]): Promise<TimelineDirectMedia[]> => {
-            const supportedFiles = files.filter((file) => file.type.startsWith("video/") || isAudioFile(file));
+            const supportedFiles = files.filter((file) => file.type.startsWith("video/") || ["image/png", "image/jpeg", "image/webp"].includes(file.type) || isAudioFile(file));
             if (!supportedFiles.length) {
-                message.warning("请选择视频、MP3 或 WAV 文件");
+                message.warning("请选择视频、PNG/JPEG/WebP 图片、MP3 或 WAV 文件");
                 return [];
             }
             const created: TimelineDirectMedia[] = [];
             for (const file of supportedFiles) {
                 try {
-                    if (isAudioFile(file)) {
+                    if (file.type.startsWith("image/")) {
+                        const uploaded = await uploadImage(file);
+                        const media: TimelineDirectMedia = { id: crypto.randomUUID(), kind: "image", title: file.name, storageKey: uploaded.storageKey, url: uploaded.url, width: uploaded.width, height: uploaded.height };
+                        media.assetId = await persistTimelineMedia(media);
+                        created.push(media);
+                    } else if (isAudioFile(file)) {
                         const audio = await uploadMediaFile(file, "audio");
                         const media: TimelineDirectMedia = {
                             id: `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

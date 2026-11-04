@@ -5,14 +5,17 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { resolveMediaUrl } from "@/services/file-storage";
 import { formatTimelineTime } from "@/lib/timeline/timeline-view";
 import { createDefaultSubtitleStyle } from "@/types/timeline";
-import type { TimelineClip } from "@/types/timeline";
+import type { TimelineClip, TimelineProject } from "@/types/timeline";
 import type { CanvasNodeData } from "@/types/canvas";
+import { TimelineOverlayPreview } from "./timeline-overlay-preview";
+import { resourceFileUrl } from "@/services/api/resources";
 import { CanvasSubtitleOverlay } from "./canvas-subtitle-overlay";
 
 type CanvasTheme = (typeof canvasThemes)[keyof typeof canvasThemes];
 
 type CanvasTimelinePreviewProps = {
     clips: TimelineClip[];
+    timeline?: TimelineProject;
     nodes: CanvasNodeData[];
     playheadMs: number;
     playing: boolean;
@@ -29,14 +32,15 @@ const AUTO_ADVANCE_GAP_MS = 500;
  * 时间线弹窗的所见即所得预览：显示播放头所在视频片段，并叠加当前字幕。
  * 播放时以视频时间为基准推进播放头；暂停时播放头（标尺跳转）驱动视频画面。
  */
-export function CanvasTimelinePreview({ clips, nodes, playheadMs, playing, theme, onTogglePlay, onPlayheadChange }: CanvasTimelinePreviewProps) {
+export function CanvasTimelinePreview({ timeline, clips: allClips, nodes, playheadMs, playing, theme, onTogglePlay, onPlayheadChange }: CanvasTimelinePreviewProps) {
+    const clips = useMemo(() => allClips.filter((c) => !timeline || timeline.tracks.find((t) => t.id === c.trackId)?.visible !== false), [allClips, timeline]);
     const videoRef = useRef<HTMLVideoElement>(null);
     const [videoUrl, setVideoUrl] = useState("");
     const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
     // 源内定位目标（秒）；视频换源后 metadata 尚未加载时先记录，loadedmetadata 后再应用。
     const targetSeekSecRef = useRef<number | null>(null);
 
-    const videoClips = useMemo(() => clips.filter((clip) => clip.kind === "video").sort((a, b) => a.startMs - b.startMs), [clips]);
+    const videoClips = useMemo(() => clips.filter((clip) => clip.kind === "video" || (clip.kind === "image" && !clip.overlay)).sort((a, b) => a.startMs - b.startMs), [clips]);
     const activeVideoClip = useMemo(() => videoClips.find((clip) => playheadMs >= clip.startMs && playheadMs < clip.startMs + clip.durationMs) || null, [playheadMs, videoClips]);
     const activeSubtitleClip = useMemo(() => clips.find((clip) => clip.kind === "subtitle" && playheadMs >= clip.startMs && playheadMs < clip.startMs + clip.durationMs && Boolean(clip.text?.trim())) || null, [clips, playheadMs]);
     const activeNode = useMemo(() => (activeVideoClip ? nodes.find((node) => node.id === activeVideoClip.nodeId) || null : null), [activeVideoClip, nodes]);
@@ -56,8 +60,8 @@ export function CanvasTimelinePreview({ clips, nodes, playheadMs, playing, theme
         if (!node && !media) return;
         let cancelled = false;
         // 直连媒体片段（directMedia，不落画布）与画布节点走同一套稳定资源地址解析策略。
-        const storageKey = node?.metadata?.storageKey || media?.storageKey || "";
-        const fallback = node?.metadata?.content || media?.url || "";
+        const storageKey = media?.storageKey || node?.metadata?.storageKey || "";
+        const fallback = media?.url || node?.metadata?.content || "";
         void resolveMediaUrl(storageKey, fallback).then((url) => {
             if (!cancelled) setVideoUrl(url);
         });
@@ -126,12 +130,30 @@ export function CanvasTimelinePreview({ clips, nodes, playheadMs, playing, theme
 
     return (
         <div className="flex items-center gap-3 border-b px-4 py-2" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}>
-            <div className="relative grid shrink-0 place-items-center overflow-hidden rounded-lg bg-black" style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }} data-canvas-no-zoom>
+            <div
+                className="relative grid shrink-0 place-items-center overflow-hidden rounded-lg bg-black"
+                style={{ width: timeline?.output ? (PREVIEW_HEIGHT * timeline.output.width) / timeline.output.height : PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+                data-canvas-no-zoom
+            >
                 {videoUrl && activeVideoClip ? (
                     <>
-                        <div className="relative" style={previewDisplay ? { width: previewDisplay.width, height: previewDisplay.height } : { width: "100%", height: "100%" }}>
-                            <video ref={videoRef} className="block h-full w-full" src={videoUrl} playsInline preload="metadata" onLoadedMetadata={(event) => handleVideoLoadedMetadata(event.currentTarget)} onTimeUpdate={handleTimeUpdate} />
-                            {activeSubtitleClip ? <CanvasSubtitleOverlay text={activeSubtitleClip.text || ""} highlight={activeHighlight} style={subtitleStyle} /> : null}
+                        <div className="relative" style={!timeline?.output && previewDisplay ? { width: previewDisplay.width, height: previewDisplay.height } : { width: "100%", height: "100%" }}>
+                            {activeVideoClip.kind === "image" ? (
+                                <img src={videoUrl} alt={activeVideoClip.title || "画面"} className="h-full w-full object-contain" />
+                            ) : (
+                                <video
+                                    muted={timeline?.tracks.find((t) => t.id === activeVideoClip.trackId)?.muted}
+                                    style={{ objectFit: timeline?.output?.fit === "crop" ? "cover" : "contain" }}
+                                    ref={videoRef}
+                                    className="block h-full w-full"
+                                    src={videoUrl}
+                                    playsInline
+                                    preload="metadata"
+                                    onLoadedMetadata={(event) => handleVideoLoadedMetadata(event.currentTarget)}
+                                    onTimeUpdate={handleTimeUpdate}
+                                />
+                            )}
+                            {activeSubtitleClip && !timeline?.output?.burnSubtitles ? <CanvasSubtitleOverlay text={activeSubtitleClip.text || ""} highlight={activeHighlight} style={subtitleStyle} /> : null}
                         </div>
                         <button
                             type="button"
@@ -149,6 +171,17 @@ export function CanvasTimelinePreview({ clips, nodes, playheadMs, playing, theme
                     </>
                 ) : (
                     <div className="px-4 text-center text-xs opacity-55">该位置无视频片段</div>
+                )}
+                {timeline && (
+                    <TimelineOverlayPreview
+                        timeline={timeline}
+                        timeMs={playheadMs}
+                        resolveImage={(c) => {
+                            const n = nodes.find((n) => n.id === c.nodeId);
+                            const key = c.directMedia?.storageKey || n?.metadata?.storageKey;
+                            return key?.startsWith("resource:") ? resourceFileUrl(key.slice(9)) : c.directMedia?.url || n?.metadata?.content;
+                        }}
+                    />
                 )}
             </div>
             <div className="min-w-0 flex-1">
