@@ -117,6 +117,11 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 				dramaReferences, snapshotErr = s.repo.DramaResourceReferences(userID, ownedIDs)
 				snapshot.Direct = append(snapshot.Direct, dramaReferences...)
 			}
+			if snapshotErr == nil {
+				var advertisingReferences []repository.ResourceDirectReference
+				advertisingReferences, snapshotErr = s.repo.AdvertisingResourceReferences(userID, ownedIDs)
+				snapshot.Direct = append(snapshot.Direct, advertisingReferences...)
+			}
 		} else {
 			snapshot, snapshotErr = s.repo.ResourceReferenceSnapshotExcludingAssets(userID, assetIDs, ownedIDs)
 		}
@@ -126,7 +131,7 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 		sharedAssetResourceIDs := map[string]struct{}{}
 		for _, reference := range snapshot.Direct {
 			if _, exists := ownedIDSet[reference.ResourceID]; exists {
-				if reference.Kind == "素材" || reference.Kind == repository.DramaResourceReferenceKind {
+				if reference.Kind == "素材" || reference.Kind == repository.DramaResourceReferenceKind || (deleteReferencedResources && reference.Kind == repository.AdvertisingResourceReferenceKind) {
 					sharedAssetResourceIDs[reference.ResourceID] = struct{}{}
 					continue
 				}
@@ -174,6 +179,11 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 		}
 	}
 	if message := resourceOccupiedMessage(usages); message != "" {
+		for _, usage := range usages {
+			if usage.Kind == repository.AdvertisingResourceReferenceKind {
+				return advertisingError(409, "advertising_resource_in_use", message)
+			}
+		}
 		return BadAuthRequest(message)
 	}
 
@@ -199,6 +209,9 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 		}
 		if errors.Is(err, repository.ErrCanvasHistoryResourceReferenced) {
 			return BadAuthRequest("素材仍被画布历史版本引用，已保留文件")
+		}
+		if errors.Is(err, repository.ErrAdvertisingResourceReferenced) {
+			return advertisingError(409, "advertising_resource_in_use", "资源仍被广告草稿或确认版本引用，已保留文件")
 		}
 		return fmt.Errorf("素材记录删除失败，请重试：%w", err)
 	}

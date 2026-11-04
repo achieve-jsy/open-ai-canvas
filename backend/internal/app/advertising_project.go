@@ -379,6 +379,31 @@ func (s *Service) ListAdvertisingRevisions(userID, id string, page, size int) (A
 	}
 	return result, nil
 }
+func (s *Service) DeleteAdvertisingProject(userID, id string, expected int64) error {
+	if err := advertisingAccess(userID, id); err != nil {
+		return err
+	}
+	if expected < 1 {
+		return BadAuthRequest("expectedRevision必须为正整数")
+	}
+	err := s.repo.AdvertisingTransaction(userID, id, func(repo *repository.Repository) error {
+		if err := repo.CASAdvertisingProject(id, expected, map[string]any{"revision": expected + 1}); err != nil {
+			return err
+		}
+		if err := repo.GuardAdvertisingDeletion(userID, id); err != nil {
+			return err
+		}
+		if err := repo.DeleteAdvertisingContent(id); err != nil {
+			return err
+		}
+		return deleteProjectWithRepository(repo, userID, id)
+	})
+	if errors.Is(err, repository.ErrProjectHasActiveTasks) {
+		return advertisingError(409, "advertising_active_tasks", "广告项目仍有活动任务，请等待完成或取消")
+	}
+	return advertisingFailure(err)
+}
+
 func (s *Service) GetAdvertisingRevision(userID, id, versionID string) (AdvertisingRevisionDetail, error) {
 	if err := advertisingAccess(userID, id); err != nil {
 		return AdvertisingRevisionDetail{}, err

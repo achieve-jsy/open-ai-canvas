@@ -48,7 +48,7 @@ func TestAdvertisingProjectPostgres(t *testing.T) {
 	for _, check := range []struct {
 		name string
 		run  func(*testing.T, *Service, *gorm.DB)
-	}{{"lifecycle", checkAdvertisingProjectLifecycle}, {"concurrent", checkAdvertisingProjectConcurrentSave}} {
+	}{{"lifecycle", checkAdvertisingProjectLifecycle}, {"concurrent", checkAdvertisingProjectConcurrentSave}, {"delete-admission-lock", checkAdvertisingDeleteAdmissionLock}} {
 		t.Run(check.name, func(t *testing.T) {
 			admin, err := database.Open(database.Config{Driver: "postgres", DSN: dsn})
 			if err != nil {

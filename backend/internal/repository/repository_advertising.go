@@ -11,6 +11,104 @@ import (
 	"yingce/backend/internal/model"
 )
 
+const AdvertisingResourceReferenceKind = "广告项目"
+
+var ErrAdvertisingResourceReferenced = errors.New("资源仍被广告草稿或确认版本引用")
+
+// GuardAdvertisingDeletion runs inside the advertising transaction before removing references.
+func (r *Repository) GuardAdvertisingDeletion(userID, id string) (err error) {
+	defer func() {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
+			err = ErrProjectHasActiveTasks
+		}
+	}()
+	if r.Dialect() == "postgres" {
+		// ponytail: rare deletes briefly exclude all task writes; use per-scope admission
+		// locks when deletion throughput matters. NOWAIT avoids deadlocks with nested canvas writes.
+		if err := r.db.Exec("LOCK TABLE tasks IN SHARE ROW EXCLUSIVE MODE NOWAIT").Error; err != nil {
+			return err
+		}
+		var project model.Project
+		if err := r.db.Where("id = ? AND user_id = ?", id, userID).Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).First(&project).Error; err != nil {
+			return err
+		}
+	}
+	var canvases []model.CanvasProject
+	query := r.db.Select("id").Where("user_id = ? AND project_id = ?", userID, id).Order("id")
+	if r.Dialect() == "postgres" {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"})
+	}
+	if err := query.Find(&canvases).Error; err != nil {
+		return err
+	}
+	scopes := []string{id}
+	for _, canvas := range canvases {
+		scopes = append(scopes, canvas.ID)
+	}
+	for _, scope := range scopes {
+		activity, err := r.CanvasAgentActivity(userID, scope)
+		if err != nil {
+			return err
+		}
+		if activity != nil {
+			return ErrProjectHasActiveTasks
+		}
+	}
+	return nil
+}
+
+func (r *Repository) DeleteAdvertisingContent(id string) error {
+	for _, row := range []any{&model.AdvertisingResourceReference{}, &model.AdvertisingRevision{}, &model.AdvertisingProject{}} {
+		if err := r.db.Where("project_id = ?", id).Delete(row).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repository) AdvertisingResourceReferences(userID string, ids []string) ([]ResourceDirectReference, error) {
+	result := []ResourceDirectReference{}
+	// Match the existing reference-query batch ceiling for SQLite parameter limits.
+	for start := 0; start < len(ids); start += 400 {
+		var rows []struct{ ProjectID, ScopeKey, ResourceID, Name string }
+		err := r.db.Table("advertising_resource_references AS refs").Select("refs.project_id, refs.scope_key, refs.resource_id, projects.name").Joins("JOIN projects ON projects.id = refs.project_id").Where("projects.user_id = ? AND refs.resource_id IN ?", userID, ids[start:min(start+400, len(ids))]).Scan(&rows).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			label := row.Name + "（确认版本）"
+			if row.ScopeKey == "draft" {
+				label = row.Name + "（草稿）"
+			}
+			result = append(result, ResourceDirectReference{Kind: AdvertisingResourceReferenceKind, ID: row.ProjectID + "/" + row.ScopeKey, Title: label, ResourceID: row.ResourceID})
+		}
+	}
+	return result, nil
+}
+
+// Called inside deletion transactions; the RESTRICT FK closes a binding racing this read.
+func (r *Repository) RequireNoAdvertisingReferences(ids []string) error {
+	// Lock resources before checking: FK insertion takes a conflicting key-share
+	// lock on PostgreSQL, so a late binding is observed rather than a raw FK error.
+	if len(ids) > 0 && r.Dialect() == "postgres" {
+		var rows []model.Resource
+		if err := r.db.Select("id").Where("id IN ?", ids).Order("id").Clauses(clause.Locking{Strength: "UPDATE"}).Find(&rows).Error; err != nil {
+			return err
+		}
+	}
+	for start := 0; start < len(ids); start += 400 {
+		var count int64
+		if err := r.db.Model(&model.AdvertisingResourceReference{}).Where("resource_id IN ?", ids[start:min(start+400, len(ids))]).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrAdvertisingResourceReferenced
+		}
+	}
+	return nil
+}
+
 var ErrAdvertisingRevisionConflict = errors.New("广告草稿已更新，请重新读取")
 
 // Acquire the write lock before any reads on SQLite to avoid read-to-write upgrades.

@@ -178,7 +178,12 @@ func (r *Repository) ClaimFailedResourceUpload(userID string, id string) (bool, 
 }
 
 func (r *Repository) DeleteResource(userID string, id string) error {
-	return r.db.Delete(&model.Resource{}, "id = ? AND user_id = ?", id, userID).Error
+	return r.Transaction(func(repo *Repository) error {
+		if err := repo.RequireNoAdvertisingReferences([]string{id}); err != nil {
+			return err
+		}
+		return repo.db.Delete(&model.Resource{}, "id = ? AND user_id = ?", id, userID).Error
+	})
 }
 
 func (r *Repository) Resource(id string) (*model.Resource, error) {
