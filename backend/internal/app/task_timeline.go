@@ -272,7 +272,7 @@ type timelineRenderResult struct {
 
 // CreateTimelineRenderTask 创建时间线渲染任务：本地 ffmpeg 合成，不经模型
 // 路由与计费；创建时校验快照至少包含一个可渲染媒体片段。
-func (s *Service) CreateTimelineRenderTask(userID string, req TimelineRenderCreateRequest) (*model.Task, error) {
+func (s *Service) prepareTimelineRenderTask(userID string, req TimelineRenderCreateRequest) (*model.Task, error) {
 	if s.IsDraining() {
 		return nil, &AppError{Status: 503, Code: 503, Message: "服务正在维护，暂不接受新的生成任务", Retryable: true}
 	}
@@ -286,10 +286,6 @@ func (s *Service) CreateTimelineRenderTask(userID string, req TimelineRenderCrea
 	if !plan.HasMedia {
 		return nil, BadAuthRequest("时间线没有可渲染的媒体片段")
 	}
-	policy, err := s.RuntimePolicy()
-	if err != nil {
-		return nil, err
-	}
 	input := timelineRenderInput{ProjectID: strings.TrimSpace(req.ProjectID), Timeline: req.Timeline}
 	inputJSON, _ := json.Marshal(input)
 	task := model.Task{
@@ -298,7 +294,19 @@ func (s *Service) CreateTimelineRenderTask(userID string, req TimelineRenderCrea
 		Stage: "等待队列调度", Progress: 5, Prompt: "时间线渲染",
 		Provider: "local", Model: "ffmpeg", InputJSON: string(inputJSON),
 	}
-	if err := s.createTaskWithinStorageQuota(&task, nil, policy); err != nil {
+	return &task, nil
+}
+
+func (s *Service) CreateTimelineRenderTask(userID string, req TimelineRenderCreateRequest) (*model.Task, error) {
+	task, err := s.prepareTimelineRenderTask(userID, req)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := s.RuntimePolicy()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.createTaskWithinStorageQuota(task, nil, policy); err != nil {
 		if errors.Is(err, repository.ErrActiveTaskLimit) {
 			return nil, BadAuthRequest(fmt.Sprintf("同时排队或运行的任务最多 %d 个，请等待已有任务完成", policy.Task.ActiveTaskLimit))
 		}
@@ -306,5 +314,5 @@ func (s *Service) CreateTimelineRenderTask(userID string, req TimelineRenderCrea
 	}
 	s.recordActivity(userID, "task", 1)
 	_ = s.log(userID, task.ID, "info", "时间线渲染任务已进入队列", "")
-	return taskForOutput(task), nil
+	return taskForOutput(*task), nil
 }

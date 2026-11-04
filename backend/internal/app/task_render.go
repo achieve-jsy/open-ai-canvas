@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"yingce/backend/internal/model"
+	"yingce/backend/internal/repository"
 )
 
 const renderFfmpegEnv = "CANVAS_FFMPEG_PATH"
@@ -100,6 +101,13 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	durationMs := planDurationMs(plan)
 	fileName := fmt.Sprintf("timeline-render-%s.mp4", time.Now().Format("20060102-150405"))
 	outWidth, outHeight := plan.size()
+	if strings.HasPrefix(task.ProjectID, "ad_") {
+		info, err := probeMediaFile(ctx, renderedPath)
+		if err != nil || !info.HasAudio || info.Width != outWidth || info.Height != outHeight || info.DurationMs < durationMs-34 || info.DurationMs > durationMs+34 {
+			return w.failTimelineTask(task, "渲染失败", "成片音视频流、尺寸或时长校验失败")
+		}
+		durationMs = info.DurationMs
+	}
 	resource, created, err := s.storeResource(task.UserID, "media", fileName, "video/mp4", stat.Size(), outWidth, outHeight, durationMs, file, nil, false)
 	if err != nil || resource == nil {
 		return w.failTimelineTask(task, "渲染失败", "保存渲染产物失败")
@@ -131,7 +139,7 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	task.ResultJSON = string(payload)
 	completedAt := time.Now()
 	task.CompletedAt = &completedAt
-	if err := s.repo.SaveTaskCompletion(task, model.TaskStatusRunning, nil); err != nil {
+	if err := s.repo.SaveTaskCompletionWithRegistration(task, model.TaskStatusRunning, nil, func(repo *repository.Repository) error { return s.registerAdvertisingRenderOutput(repo, *task) }); err != nil {
 		// Cancellation can win while storage is writing. Reuse reference-aware cleanup;
 		// a committed/referenced result stays intact and physical deletion is retriable.
 		if created {

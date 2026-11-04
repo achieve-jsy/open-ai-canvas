@@ -59,6 +59,16 @@ type renderClip struct {
 	} `json:"directMedia"`
 }
 
+func (c *renderClip) UnmarshalJSON(data []byte) error {
+	type plain renderClip
+	value := plain{Volume: 1}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*c = renderClip(value)
+	return nil
+}
+
 type renderTrack struct {
 	Order   int    `json:"order"`
 	ID      string `json:"id"`
@@ -318,10 +328,7 @@ func buildRenderFFmpegArgs(plan renderPlan, target string) []string {
 			filters = append(filters, fmt.Sprintf("%s[%s]", silence, silentLabel))
 			filters = append(filters, fmt.Sprintf("[%s]atrim=0:%.3f,asetpts=N/SR/TB[%s]", silentLabel, duration, audioLabel))
 		} else {
-			volume := 1.0
-			if seg.Clip.Volume > 0 {
-				volume = seg.Clip.Volume
-			}
+			volume := math.Max(0, seg.Clip.Volume)
 			filters = append(filters, fmt.Sprintf("[%d:a]aformat=sample_fmts=fltp:sample_rates=%d:channel_layouts=stereo,volume=%.3f,apad,atrim=0:%.3f,asetpts=N/SR/TB[%s]",
 				audioIn, renderSampleRate, volume, duration, audioLabel))
 		}
@@ -340,10 +347,7 @@ func buildRenderFFmpegArgs(plan renderPlan, target string) []string {
 		var mixInputs strings.Builder
 		mixInputs.WriteString("[abase]")
 		for i, overlay := range overlays {
-			volume := 1.0
-			if overlay.Clip.Volume > 0 {
-				volume = overlay.Clip.Volume
-			}
+			volume := math.Max(0, overlay.Clip.Volume)
 			delay := overlay.Clip.StartMs
 			if delay < 0 {
 				delay = 0

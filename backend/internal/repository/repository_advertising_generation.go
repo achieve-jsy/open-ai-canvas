@@ -115,3 +115,32 @@ func (r *Repository) AdvertisingAssemblies(productionID string, page, size int) 
 	err := q.Order("created_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&rows).Error
 	return rows, total, err
 }
+
+func (r *Repository) AdvertisingRenderForOperation(assemblyID, key string) (*model.AdvertisingRenderAttempt, error) {
+	var row model.AdvertisingRenderAttempt
+	err := r.db.Where("assembly_id = ? AND client_operation_id = ?", assemblyID, key).First(&row).Error
+	return &row, err
+}
+func (r *Repository) AdvertisingRenderForTask(taskID string) (*model.AdvertisingRenderAttempt, error) {
+	var row model.AdvertisingRenderAttempt
+	err := r.db.Where("task_id = ?", taskID).First(&row).Error
+	return &row, err
+}
+func (r *Repository) AdvertisingAssemblyForTask(taskID string) (*model.AdvertisingAssembly, error) {
+	var row model.AdvertisingAssembly
+	err := r.db.Joins("JOIN advertising_render_attempts ON advertising_render_attempts.assembly_id = advertising_assemblies.id").Where("advertising_render_attempts.task_id = ?", taskID).First(&row).Error
+	return &row, err
+}
+func (r *Repository) CreateAdvertisingRender(row *model.AdvertisingRenderAttempt) error {
+	return r.db.Omit(clause.Associations).Create(row).Error
+}
+func (r *Repository) AdvertisingRenders(assemblyID string, page, size int) ([]model.AdvertisingRenderAttempt, int64, error) {
+	rows := []model.AdvertisingRenderAttempt{}
+	var total int64
+	q := r.db.Model(&model.AdvertisingRenderAttempt{}).Where("assembly_id = ?", assemblyID)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.Order("created_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&rows).Error
+	return rows, total, err
+}

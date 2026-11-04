@@ -88,17 +88,27 @@ func (s *Service) getAdvertisingCandidateResource(repo *repository.Repository, u
 	if !exists {
 		return nil, advertisingCandidateUnavailable()
 	}
+	if err := s.advertisingResourceReadable(userID, resource); err != nil {
+		return nil, err
+	}
+	return resource, nil
+}
+
+func (s *Service) advertisingResourceReadable(userID string, resource *model.Resource) error {
 	// ponytail: bounded readability check holds the production transaction; preflight plus identity recheck if storage latency becomes a bottleneck.
+	if resource.ObjectKey == "" || resource.Status != model.ResourceStatusReady {
+		return advertisingCandidateUnavailable()
+	}
 	stream, err := s.openResourceRange(userID, resource, "bytes=0-0")
 	if err != nil {
-		return nil, advertisingCandidateUnavailable()
+		return advertisingCandidateUnavailable()
 	}
 	defer stream.Body.Close()
 	watchdog := time.AfterFunc(mediaProbeRemoteReadTimeout, func() { _ = stream.Body.Close() })
 	defer watchdog.Stop()
 	var first [1]byte
 	if _, err := io.ReadFull(stream.Body, first[:]); err != nil {
-		return nil, advertisingCandidateUnavailable()
+		return advertisingCandidateUnavailable()
 	}
-	return resource, nil
+	return nil
 }

@@ -117,6 +117,8 @@ func (r *Repository) AdvertisingResourceReferences(userID string, ids []string) 
 				label = row.Name + "（生成候选）"
 			case strings.HasPrefix(row.ScopeKey, "production:"):
 				label = row.Name + "（制作设置）"
+			case strings.HasPrefix(row.ScopeKey, "render:"):
+				label = row.Name + "（成片导出）"
 			case strings.HasPrefix(row.ScopeKey, "assembly:"):
 				label = row.Name + "（组装版本）"
 			}

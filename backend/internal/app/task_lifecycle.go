@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"yingce/backend/internal/model"
 	"yingce/backend/internal/repository"
 )
@@ -45,6 +47,13 @@ func (w *taskLifecycleCoordinator) retryTask(userID string, id string) (*model.T
 	}
 	if advertising {
 		return nil, advertisingConflict("approval_required", "广告重做需要重新报价并确认费用")
+	}
+	if task.Type == model.TaskTypeTimelineRender && strings.HasPrefix(task.ProjectID, "ad_") {
+		if _, err := s.repo.AdvertisingRenderForTask(task.ID); err == nil {
+			return nil, advertisingConflict("render_retry_required", "请从广告组装创建新的导出尝试")
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
 	}
 	if task.MediaRecoveryJSON != "" {
 		return nil, BadAuthRequest("作品已生成，请使用重试保存，不要重复生成")

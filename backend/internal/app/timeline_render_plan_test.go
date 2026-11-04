@@ -272,3 +272,27 @@ func TestBuildRenderFFmpegArgsWritesAIGCMetadata(t *testing.T) {
 		t.Fatalf("label without source provenance = %+v", plain)
 	}
 }
+
+func TestRenderVolumeZeroAndOmitted(t *testing.T) {
+	for _, item := range []struct {
+		raw    string
+		volume float64
+	}{{"{}", 1}, {"{\"volume\":0}", 0}, {"{\"volume\":0.15}", 0.15}} {
+		var clip renderClip
+		if err := json.Unmarshal([]byte(item.raw), &clip); err != nil {
+			t.Fatal(err)
+		}
+		if clip.Volume != item.volume {
+			t.Fatalf("%s volume=%v", item.raw, clip.Volume)
+		}
+	}
+	plan := buildRenderPlan(renderProject{Version: 2, Tracks: []renderTrack{{ID: "v", Kind: "video"}, {ID: "a", Kind: "audio"}}, Clips: []renderClip{renderClipFixture("v", "video", "v", 0, 1000, "resource:v"), renderClipFixture("a", "audio", "a", 0, 1000, "resource:a")}})
+	plan.Segments[0].Clip.Volume = 0
+	plan.Segments[0].Source = &renderSource{Path: "v.mp4", HasAudio: true}
+	plan.AudioOverlays[0].Clip.Volume = 0
+	plan.AudioOverlays[0].Source = &renderSource{Path: "a.wav", HasAudio: true}
+	args := strings.Join(buildRenderFFmpegArgs(plan, "out.mp4"), " ")
+	if strings.Count(args, "volume=0.000") != 2 {
+		t.Fatalf("zero volume changed: %s", args)
+	}
+}
