@@ -274,6 +274,54 @@ func checkAdvertisingProjectLifecycle(t *testing.T, svc *Service, db *gorm.DB) {
 		t.Fatal("foreign reference")
 	}
 }
+func TestAdvertisingCannotBypassRevision(t *testing.T) {
+	svc, db := advertisingTestService(t)
+	ad, err := svc.CreateAdvertisingProject("owner", AdvertisingCreateRequest{Name: "Ad"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateProject("owner", CreateProjectRequest{Name: "Bypass", Type: "advertising"}); err == nil {
+		t.Error("generic create accepted advertising")
+	}
+	if _, err := svc.UpdateProject("owner", ad.Project.ID, UpdateProjectRequest{Name: "Updated ad"}); err == nil {
+		t.Error("generic update accepted advertising")
+	}
+	if _, err := svc.CreateProjectUnit("owner", ad.Project.ID, CreateProjectUnitRequest{Title: "Bypass"}); err == nil {
+		t.Error("unit write accepted advertising")
+	}
+	if _, err := svc.ProjectDetail("owner", ad.Project.ID); err == nil {
+		t.Error("drama detail accepted advertising")
+	}
+	if _, err := svc.activeProjectForUser("owner", ad.Project.ID); err == nil {
+		t.Error("drama guard accepted advertising")
+	}
+	if _, err := svc.CreateUnitWorkflow("owner", ad.Project.ID, "unit"); err == nil {
+		t.Error("workflow accepted advertising")
+	}
+	if _, err := svc.CreateProjectShot("owner", ad.Project.ID, CreateProjectShotRequest{Title: "Shot"}); err == nil {
+		t.Error("shot accepted advertising")
+	}
+	if _, _, err := svc.dramaForUser("owner", ad.Project.ID); err == nil {
+		t.Error("drama accepted advertising")
+	}
+	if err := svc.DeleteProject("owner", ad.Project.ID); err == nil {
+		t.Error("generic delete accepted advertising")
+	}
+	if err := db.Create(&model.Project{ID: "drama", UserID: "owner", Name: "Drama", Type: "short-drama", Revision: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateProject("owner", "drama", UpdateProjectRequest{Type: "advertising"}); err == nil {
+		t.Error("generic type switch accepted advertising")
+	}
+	projects, err := svc.repo.Projects("owner")
+	if err != nil || len(projects) != 1 || projects[0].ID != "drama" {
+		t.Errorf("drama list includes ad: %+v %v", projects, err)
+	}
+	if _, err := svc.repo.ProjectForUser("owner", ad.Project.ID); err != nil {
+		t.Fatal("shared ownership lookup broken", err)
+	}
+}
+
 func TestAdvertisingProjectResourceValidation(t *testing.T) {
 	svc, db := advertisingTestService(t)
 	seedResource(t, db, "resource", "owner", "image/png")

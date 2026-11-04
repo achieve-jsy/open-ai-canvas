@@ -18,14 +18,14 @@ var ErrProjectNameConflict = errors.New("project name conflict")
 
 func (r *Repository) Projects(userID string) ([]model.Project, error) {
 	var projects []model.Project
-	err := r.db.Where("user_id = ?", userID).Order("updated_at desc").Find(&projects).Error
+	err := r.db.Where("user_id = ? AND (type IS NULL OR type <> ?)", userID, "advertising").Order("updated_at desc").Find(&projects).Error
 	return projects, err
 }
 
 func (r *Repository) ProjectsPage(userID string, page int, pageSize int) ([]model.Project, int64, error) {
 	var projects []model.Project
 	var total int64
-	query := r.db.Model(&model.Project{}).Where("user_id = ?", userID)
+	query := r.db.Model(&model.Project{}).Where("user_id = ? AND (type IS NULL OR type <> ?)", userID, "advertising")
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

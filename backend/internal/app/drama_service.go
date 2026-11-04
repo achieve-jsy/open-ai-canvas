@@ -215,7 +215,7 @@ func itoa(value int) string {
 }
 
 func (s *Service) dramaForUser(userID string, projectID string) (*model.Project, *model.DramaProduction, error) {
-	project, err := s.repo.ProjectForUser(userID, strings.TrimSpace(projectID))
+	project, err := s.shortDramaProjectForUser(userID, strings.TrimSpace(projectID))
 	if err != nil {
 		return nil, nil, err
 	}

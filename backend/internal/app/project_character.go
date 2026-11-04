@@ -290,7 +290,7 @@ func (s *Service) UnbindCharacterVoice(userID string, assetID string) (Character
 	return s.Character(userID, asset.ID)
 }
 func (s *Service) CreateProjectCharacter(userID string, projectID string, req CreateProjectCharacterRequest) (ProjectCharacterDetail, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return ProjectCharacterDetail{}, err
 	}
 	name := strings.TrimSpace(req.Name)

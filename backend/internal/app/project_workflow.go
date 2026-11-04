@@ -566,6 +566,9 @@ func findTaskOutputResource(value any, mediaType string) (string, string) {
 }
 
 func (s *Service) ensureGeneratedProjectAsset(task model.Task, projectID string, shotID string, resourceID string, mediaType string) (string, error) {
+	if _, err := s.shortDramaProjectForUser(task.UserID, projectID); err != nil {
+		return "", err
+	}
 	representations, err := s.repo.AssetRepresentationsForTask(task.ID)
 	if err != nil {
 		return "", err

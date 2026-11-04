@@ -27,16 +27,21 @@ const (
 type ErrorReason string
 
 const (
-	ReasonInvalidArgument        ErrorReason = "invalid_argument"
-	ReasonUnauthorized           ErrorReason = "unauthorized"
-	ReasonForbidden              ErrorReason = "forbidden"
-	ReasonNotFound               ErrorReason = "not_found"
-	ReasonConflict               ErrorReason = "conflict"
-	ReasonProjectNameConflict    ErrorReason = "project_name_conflict"
-	ReasonSkillVersionConflict   ErrorReason = "skill_version_conflict"
-	ReasonCanvasResourcesMissing ErrorReason = "canvas_history_resources_missing"
-	ReasonFailedPrecondition     ErrorReason = "failed_precondition"
-	ReasonQuotaExceeded          ErrorReason = "quota_exceeded"
+	ReasonAdvertisingRevisionConflict    ErrorReason = "advertising_revision_conflict"
+	ReasonAdvertisingInvalidDocument     ErrorReason = "advertising_invalid_document"
+	ReasonAdvertisingResourceUnavailable ErrorReason = "advertising_resource_unavailable"
+	ReasonAdvertisingResourceInUse       ErrorReason = "advertising_resource_in_use"
+	ReasonAdvertisingActiveTasks         ErrorReason = "advertising_active_tasks"
+	ReasonInvalidArgument                ErrorReason = "invalid_argument"
+	ReasonUnauthorized                   ErrorReason = "unauthorized"
+	ReasonForbidden                      ErrorReason = "forbidden"
+	ReasonNotFound                       ErrorReason = "not_found"
+	ReasonConflict                       ErrorReason = "conflict"
+	ReasonProjectNameConflict            ErrorReason = "project_name_conflict"
+	ReasonSkillVersionConflict           ErrorReason = "skill_version_conflict"
+	ReasonCanvasResourcesMissing         ErrorReason = "canvas_history_resources_missing"
+	ReasonFailedPrecondition             ErrorReason = "failed_precondition"
+	ReasonQuotaExceeded                  ErrorReason = "quota_exceeded"
 	// 账号文件容量不足：前端据此展示扩容入口，与每日上传量等其它额度区分。
 	ReasonStorageCapacityExceeded ErrorReason = "storage_capacity_exceeded"
 	// 账号超出文件容量且宽限期已过：只允许读取、删除和购买扩容。

@@ -146,13 +146,13 @@ func (s *Service) summarizeProjects(userID string, projects []model.Project) ([]
 }
 
 func (s *Service) ProjectDetail(userID string, id string) (ProjectDetail, error) {
-	project, err := s.repo.ProjectForUser(userID, id)
+	project, err := s.shortDramaProjectForUser(userID, id)
 	if err != nil {
 		return ProjectDetail{}, err
 	}
 	// 项目读取允许降级修复：旧任务可能已成功持久化图片，但浏览器刷新中断了角色版本绑定。
 	if s.reconcileCharacterTurnaroundTasks(userID, project.ID) {
-		project, err = s.repo.ProjectForUser(userID, id)
+		project, err = s.shortDramaProjectForUser(userID, id)
 		if err != nil {
 			return ProjectDetail{}, err
 		}
@@ -217,6 +217,9 @@ func (s *Service) ProjectDetail(userID string, id string) (ProjectDetail, error)
 }
 
 func (s *Service) CreateProject(userID string, req CreateProjectRequest) (model.Project, error) {
+	if strings.EqualFold(strings.TrimSpace(req.Type), "advertising") {
+		return model.Project{}, BadAuthRequest("广告项目请使用广告专用接口")
+	}
 	if err := s.EnsureBuiltinProjectWorkflowTemplate(); err != nil {
 		return model.Project{}, err
 	}
@@ -275,7 +278,10 @@ func (s *Service) CreateProject(userID string, req CreateProjectRequest) (model.
 }
 
 func (s *Service) UpdateProject(userID string, id string, req UpdateProjectRequest) (model.Project, error) {
-	project, err := s.repo.ProjectForUser(userID, id)
+	if strings.EqualFold(strings.TrimSpace(req.Type), "advertising") {
+		return model.Project{}, BadAuthRequest("不能通过短剧接口修改为广告项目")
+	}
+	project, err := s.shortDramaProjectForUser(userID, id)
 	if err != nil {
 		return model.Project{}, err
 	}
@@ -360,7 +366,7 @@ func normalizeProjectDefaultModel(value string) (string, error) {
 }
 
 func (s *Service) DeleteProject(userID string, id string) error {
-	if _, err := s.repo.ProjectForUser(userID, id); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, id); err != nil {
 		return err
 	}
 	err := deleteProjectWithRepository(s.repo, userID, id)
@@ -405,8 +411,19 @@ func deleteProjectWithRepository(repo *repository.Repository, userID, id string)
 	return nil
 }
 
-func (s *Service) activeProjectForUser(userID string, projectID string) (*model.Project, error) {
+func (s *Service) shortDramaProjectForUser(userID, projectID string) (*model.Project, error) {
 	project, err := s.repo.ProjectForUser(userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if project.Type == "advertising" {
+		return nil, BadAuthRequest("广告项目不能通过短剧接口读写")
+	}
+	return project, nil
+}
+
+func (s *Service) activeProjectForUser(userID string, projectID string) (*model.Project, error) {
+	project, err := s.shortDramaProjectForUser(userID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +434,7 @@ func (s *Service) activeProjectForUser(userID string, projectID string) (*model.
 }
 
 func (s *Service) CreateProjectUnit(userID string, projectID string, req CreateProjectUnitRequest) (model.ProjectUnit, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return model.ProjectUnit{}, err
 	}
 	unit, err := newProjectUnit(projectID, req, req.Position)
@@ -434,7 +451,7 @@ func (s *Service) CreateProjectUnit(userID string, projectID string, req CreateP
 }
 
 func (s *Service) GetProjectUnit(userID string, projectID string, unitID string) (model.ProjectUnit, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return model.ProjectUnit{}, err
 	}
 	unit, err := s.repo.ProjectUnit(projectID, strings.TrimSpace(unitID))
@@ -445,7 +462,7 @@ func (s *Service) GetProjectUnit(userID string, projectID string, unitID string)
 }
 
 func (s *Service) ImportProjectUnits(userID string, projectID string, req ImportProjectUnitsRequest) ([]model.ProjectUnit, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return nil, err
 	}
 	if len(req.Units) == 0 || len(req.Units) > 2500 {
@@ -470,7 +487,7 @@ func (s *Service) ImportProjectUnits(userID string, projectID string, req Import
 }
 
 func (s *Service) ReorderProjectUnits(userID string, projectID string, req ReorderProjectUnitsRequest) error {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return err
 	}
 	units, err := s.repo.ProjectUnits(projectID)
@@ -501,7 +518,7 @@ func (s *Service) ReorderProjectUnits(userID string, projectID string, req Reord
 }
 
 func (s *Service) DeleteProjectUnit(userID string, projectID string, unitID string) error {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return err
 	}
 	if _, err := s.repo.ProjectUnit(projectID, unitID); err != nil {
@@ -534,7 +551,7 @@ func newProjectUnit(projectID string, req CreateProjectUnitRequest, position int
 }
 
 func (s *Service) UpdateProjectUnit(userID string, projectID string, unitID string, req UpdateProjectUnitRequest) (model.ProjectUnit, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return model.ProjectUnit{}, err
 	}
 	unit, err := s.repo.ProjectUnit(projectID, unitID)
@@ -564,7 +581,7 @@ func (s *Service) UpdateProjectUnit(userID string, projectID string, unitID stri
 }
 
 func (s *Service) LinkCanvasUnit(userID string, projectID string, req LinkCanvasUnitRequest) (model.CanvasUnitLink, error) {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return model.CanvasUnitLink{}, err
 	}
 	canvasID := strings.TrimSpace(req.CanvasID)
@@ -597,7 +614,7 @@ func (s *Service) LinkCanvasUnit(userID string, projectID string, req LinkCanvas
 }
 
 func (s *Service) UnlinkCanvasUnit(userID string, projectID string, canvasID string, unitID string) error {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return err
 	}
 	canvas, err := s.repo.CanvasProjectForUser(userID, strings.TrimSpace(canvasID))
@@ -614,7 +631,7 @@ func (s *Service) UnlinkCanvasUnit(userID string, projectID string, canvasID str
 }
 
 func (s *Service) UnlinkCanvasProject(userID string, projectID string, canvasID string) error {
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return err
 	}
 	canvas, err := s.repo.CanvasProjectForUser(userID, strings.TrimSpace(canvasID))

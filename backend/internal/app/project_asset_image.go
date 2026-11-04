@@ -44,7 +44,7 @@ func (s *Service) bindProjectAssetImage(userID, projectID, assetID string, req B
 	if strings.TrimSpace(req.ResourceID) == "" || strings.TrimSpace(req.ExpectedVersionID) == "" {
 		return false, BadAuthRequest("图片资源与预期资产版本不能为空")
 	}
-	if _, err := s.repo.ProjectForUser(userID, projectID); err != nil {
+	if _, err := s.shortDramaProjectForUser(userID, projectID); err != nil {
 		return false, err
 	}
 	asset, err := s.repo.AssetForUser(userID, assetID)

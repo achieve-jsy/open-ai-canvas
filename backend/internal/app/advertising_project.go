@@ -89,7 +89,7 @@ func advertisingFailure(err error) error {
 		return NotFound("广告项目或版本不存在")
 	}
 	if errors.Is(err, repository.ErrAdvertisingRevisionConflict) {
-		return advertisingError(409, "advertising_revision_conflict", "草稿已更新，请查看服务端版本后重试")
+		return advertisingError(409, kernel.ReasonAdvertisingRevisionConflict, "草稿已更新，请查看服务端版本后重试")
 	}
 	if errors.Is(err, repository.ErrProjectNameConflict) {
 		return advertisingError(409, ReasonProjectNameConflict, "项目名称已存在")
@@ -113,10 +113,10 @@ func advertisingPagination(page, size int) error {
 }
 func advertisingValidate(name string, d AdvertisingDraft, confirm bool) error {
 	if err := advertisingText("name", name, 120, true); err != nil {
-		return advertisingError(400, "advertising_invalid_document", err.Error())
+		return advertisingError(400, kernel.ReasonAdvertisingInvalidDocument, err.Error())
 	}
 	if err := validateAdvertisingDraft(d, confirm); err != nil {
-		return advertisingError(400, "advertising_invalid_document", err.Error())
+		return advertisingError(400, kernel.ReasonAdvertisingInvalidDocument, err.Error())
 	}
 	return nil
 }
@@ -142,7 +142,7 @@ func advertisingResources(repo *repository.Repository, userID string, d Advertis
 		}
 		available := found && row.Status == model.ResourceStatusReady && allowed
 		if strict && !available {
-			return nil, advertisingError(400, "advertising_resource_unavailable", "资源未就绪、类型不符或无权访问: "+id)
+			return nil, advertisingError(400, kernel.ReasonAdvertisingResourceUnavailable, "资源未就绪、类型不符或无权访问: "+id)
 		}
 		// Resource has no canonical title; use its stable ID rather than a signed URL or storage path.
 		result = append(result, AdvertisingResource{ID: id, Title: id, MimeType: row.MimeType, Width: row.Width, Height: row.Height, DurationMs: row.DurationMs, Available: available})
@@ -399,7 +399,7 @@ func (s *Service) DeleteAdvertisingProject(userID, id string, expected int64) er
 		return deleteProjectWithRepository(repo, userID, id)
 	})
 	if errors.Is(err, repository.ErrProjectHasActiveTasks) {
-		return advertisingError(409, "advertising_active_tasks", "广告项目仍有活动任务，请等待完成或取消")
+		return advertisingError(409, kernel.ReasonAdvertisingActiveTasks, "广告项目仍有活动任务，请等待完成或取消")
 	}
 	return advertisingFailure(err)
 }

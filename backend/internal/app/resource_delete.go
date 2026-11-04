@@ -181,7 +181,7 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 	if message := resourceOccupiedMessage(usages); message != "" {
 		for _, usage := range usages {
 			if usage.Kind == repository.AdvertisingResourceReferenceKind {
-				return advertisingError(409, "advertising_resource_in_use", message)
+				return advertisingError(409, ReasonAdvertisingResourceInUse, message)
 			}
 		}
 		return BadAuthRequest(message)
@@ -211,7 +211,7 @@ func (s *Service) deleteUserAssetsWithResources(userID string, ids []string, pur
 			return BadAuthRequest("素材仍被画布历史版本引用，已保留文件")
 		}
 		if errors.Is(err, repository.ErrAdvertisingResourceReferenced) {
-			return advertisingError(409, "advertising_resource_in_use", "资源仍被广告草稿或确认版本引用，已保留文件")
+			return advertisingError(409, ReasonAdvertisingResourceInUse, "资源仍被广告草稿或确认版本引用，已保留文件")
 		}
 		return fmt.Errorf("素材记录删除失败，请重试：%w", err)
 	}

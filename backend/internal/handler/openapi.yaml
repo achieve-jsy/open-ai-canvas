@@ -32,6 +32,205 @@ tags:
   - name: referral
     description: 推广中心：推广码、邀请记录与返佣
 paths:
+  /ad-projects:
+    get:
+      tags: [projects]
+      summary: 列出广告项目
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: query, name: page, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingList
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingList"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+    post:
+      tags: [projects]
+      summary: 创建广告草稿
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdvertisingCreateRequest"}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingDetail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingDetail"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}:
+    get:
+      tags: [projects]
+      summary: 读取广告草稿
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingDetail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingDetail"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+    put:
+      tags: [projects]
+      summary: 保存整份广告草稿
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdvertisingSaveRequest"}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingDetail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingDetail"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+    delete:
+      tags: [projects]
+      summary: 删除广告及确认历史
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: query, name: expectedRevision, required: true, schema: {type: integer, format: int64, minimum: 1}}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingDeleteResult
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingDeleteResult"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}/confirm:
+    post:
+      tags: [projects]
+      summary: 确认已保存草稿
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AdvertisingConfirmRequest"}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingConfirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingConfirmation"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}/revisions:
+    get:
+      tags: [projects]
+      summary: 列出不可变确认版本
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingRevisionList
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingRevisionList"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}/revisions/{revisionId}:
+    get:
+      tags: [projects]
+      summary: 读取确认快照
+      description: 广告独立于短剧开关。写入正文最多256KiB，拒绝未知字段及重复键；资源必须属于当前用户且就绪。确认重试返回原版本且不倒退latest；相同内容再次确认不增加revision。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: revisionId, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封，data为AdvertisingRevisionDetail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: "#/components/schemas/AdvertisingRevisionDetail"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
   /timeline/renders:
     post:
       tags: [tasks]
@@ -2584,6 +2783,136 @@ components:
       in: cookie
       name: open_ai_canvas_session
   schemas:
+    AdvertisingBrief:
+      type: object
+      additionalProperties: false
+      required: [durationMs]
+      properties:
+        productName: {type: string, maxLength: 120}
+        description: {type: string, maxLength: 2000}
+        audience: {type: string, maxLength: 300}
+        sellingPoints: {type: array, maxItems: 5, items: {type: string, minLength: 1, maxLength: 120}}
+        cta: {type: string, maxLength: 80}
+        durationMs: {type: integer, format: int64, minimum: 15000, maximum: 30000, default: 15000}
+    AdvertisingBrand:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, maxLength: 120}
+        primaryColor: {type: string, pattern: '^$|^#[0-9a-fA-F]{6}$'}
+        logoResourceId: {type: string, maxLength: 36}
+    AdvertisingShot:
+      type: object
+      additionalProperties: false
+      required: [id, durationMs]
+      properties:
+        id: {type: string, format: uuid}
+        durationMs: {type: integer, minimum: 1000, maximum: 15000}
+        visual: {type: string, maxLength: 1000}
+        voiceover: {type: string, maxLength: 500}
+        onScreenText: {type: string, maxLength: 200, description: 最多两行}
+        referenceResourceIds: {type: array, maxItems: 5, items: {type: string, maxLength: 36}, description: 必须属于本稿商品或附加资源池}
+    AdvertisingDraft:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, brief]
+      description: 确认需非空商品名、受众、CTA、至少1条卖点和商品图、3–5条visual非空镜头；镜头总时长等于目标。
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        brief: {$ref: '#/components/schemas/AdvertisingBrief'}
+        brand: {$ref: '#/components/schemas/AdvertisingBrand'}
+        productResourceIds: {type: array, maxItems: 10, items: {type: string, maxLength: 36}, description: PNG/JPEG/WebP，按资源ID去重}
+        additionalResourceIds: {type: array, maxItems: 20, items: {type: string, maxLength: 36}, description: PNG/JPEG/WebP/MP4/MP3/M4A/WAV}
+        shots: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/AdvertisingShot'}}
+    AdvertisingCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        draft: {$ref: '#/components/schemas/AdvertisingDraft'}
+      example: {name: 春日商品广告}
+    AdvertisingSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [name, draft, expectedRevision]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        draft: {$ref: '#/components/schemas/AdvertisingDraft'}
+        expectedRevision: {type: integer, format: int64, minimum: 1}
+    AdvertisingConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties:
+        expectedRevision: {type: integer, format: int64, minimum: 1}
+      example: {expectedRevision: 1}
+    AdvertisingResource:
+      type: object
+      properties:
+        id: {type: string}
+        title: {type: string, description: 服务端稳定标题；无标题时回退资源ID}
+        mimeType: {type: string}
+        width: {type: integer}
+        height: {type: integer}
+        durationMs: {type: integer, format: int64}
+        available: {type: boolean}
+    AdvertisingDetail:
+      type: object
+      properties:
+        project: {type: object, properties: {id: {type: string}, name: {type: string}, type: {type: string, enum: [advertising]}, revision: {type: integer}, updatedAt: {type: string, format: date-time}}}
+        draft: {$ref: '#/components/schemas/AdvertisingDraft'}
+        revision: {type: integer, format: int64}
+        latestConfirmedRevisionId: {type: string, description: 无确认版本时省略}
+        resources: {type: array, items: {$ref: '#/components/schemas/AdvertisingResource'}}
+    AdvertisingSnapshot:
+      type: object
+      properties:
+        name: {type: string}
+        draft: {$ref: '#/components/schemas/AdvertisingDraft'}
+        resources: {type: array, items: {$ref: '#/components/schemas/AdvertisingResource'}}
+    AdvertisingRevisionDetail:
+      type: object
+      properties:
+        id: {type: string}
+        projectId: {type: string}
+        sourceRevision: {type: integer, format: int64}
+        createdAt: {type: string, format: date-time}
+        snapshot: {$ref: '#/components/schemas/AdvertisingSnapshot'}
+    AdvertisingConfirmation:
+      type: object
+      properties:
+        snapshot: {$ref: '#/components/schemas/AdvertisingRevisionDetail'}
+        currentRevision: {type: integer, format: int64}
+    AdvertisingList:
+      type: object
+      properties:
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              name: {type: string}
+              productName: {type: string}
+              durationMs: {type: integer}
+              revision: {type: integer}
+              latestConfirmedRevisionId: {type: string}
+              updatedAt: {type: string, format: date-time}
+    AdvertisingRevisionList:
+      type: object
+      properties:
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer}
+        items: {type: array, items: {type: object, properties: {id: {type: string}, sourceRevision: {type: integer}, createdAt: {type: string, format: date-time}}}}
+    AdvertisingDeleteResult:
+      type: object
+      properties:
+        deleted: {type: boolean}
     TimelineRenderOutput:
       type: object
       required: [width, height, fit, burnSubtitles]
