@@ -213,6 +213,10 @@ func (w *taskLifecycleCoordinator) cancelTaskWithIntent(_ context.Context, userI
 // taskUpstreamSubmitted 表示任务已进入上游提交/生成阶段，可能已经产生上游费用。
 // 调用方应先 hydrateTaskProviderRequestID，避免 request ID 尚未写回时误判。
 func taskUpstreamSubmitted(task *model.Task) bool {
+	// Timeline rendering never submits a paid model request; its render stages remain cancellable.
+	if task.Type == model.TaskTypeTimelineRender && task.Provider == "local" && task.Model == "ffmpeg" && strings.TrimSpace(task.ProviderRequestID) == "" && task.MediaStage == "" {
+		return false
+	}
 	return strings.TrimSpace(task.ProviderRequestID) != "" || task.MediaStage != "" || !taskStageAllowsUserCancellation(task.Status, task.Stage)
 }
 

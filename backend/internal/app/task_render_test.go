@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,6 +136,162 @@ func TestCreateTimelineRenderTaskRejectsNoMedia(t *testing.T) {
 	_, err := svc.CreateTimelineRenderTask("usr-render-test", TimelineRenderCreateRequest{Timeline: textOnly})
 	if err == nil || !strings.Contains(err.Error(), "可渲染") {
 		t.Fatalf("err = %v, want mention of 没有可渲染的媒体片段", err)
+	}
+}
+
+// Exercise worker terminal writes, not just prepareRenderOverlays errors.
+func TestTimelineRenderFailureTerminals(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scenario := range []string{"resource-owner-changed", "source-file-missing", "missing-font", "cancelled-context", "cancelled-task"} {
+		t.Run(scenario, func(t *testing.T) {
+			svc, db := newTimelineTaskTestService(t)
+			svc.dataDir = t.TempDir()
+			source := seedLocalVideoResource(t, svc, "usr-render-test", 32, 32, nil)
+			project := enhancedTestProject()
+			project.Clips[0].DirectMedia.StorageKey = "resource:" + source.ID
+			queued, err := svc.CreateTimelineRenderTask("usr-render-test", TimelineRenderCreateRequest{Timeline: project})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Model(&model.Task{}).Where("id = ?", queued.ID).Updates(map[string]any{"status": model.TaskStatusRunning, "stage": "准备媒体"}).Error; err != nil {
+				t.Fatal(err)
+			}
+			task, err := svc.repo.Task(queued.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			wantStatus := model.TaskStatusFailed
+			wantError := ""
+			switch scenario {
+			case "source-file-missing":
+				// Point only this temporary fixture at an absent object; never delete user files.
+				if err := db.Model(&model.Resource{}).Where("id = ?", source.ID).Update("object_key", "missing.mp4").Error; err != nil {
+					t.Fatal(err)
+				}
+				wantError = "无法读取时间线引用的媒体"
+			case "resource-owner-changed":
+				if err := db.Model(&model.Resource{}).Where("id = ?", source.ID).Update("user_id", "other-user").Error; err != nil {
+					t.Fatal(err)
+				}
+				wantError = "时间线引用的媒体"
+			case "missing-font":
+				bin := t.TempDir()
+				if err := os.WriteFile(filepath.Join(bin, "fc-match"), []byte("#!/bin/sh\nprintf 'Wrong Font'\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+				t.Setenv(renderFfmpegEnv, ffmpeg)
+				wantError = "未安装中文字体"
+			case "cancelled-context":
+				cancel()
+				wantError = "context canceled"
+			case "cancelled-task":
+				if _, err := svc.CancelTask(ctx, task.UserID, task.ID); err != nil {
+					t.Fatal(err)
+				}
+				cancel()
+				wantStatus = model.TaskStatusCancelled
+				wantError = "任务已取消"
+			}
+			workerErr := newTaskWorkerCoordinator(svc).processTimelineRender(task, ctx)
+			if workerErr != nil && scenario != "cancelled-task" {
+				t.Fatal(workerErr)
+			}
+			stored, err := svc.repo.Task(task.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Status != wantStatus || stored.CompletedAt == nil || stored.ResultJSON != "" || !strings.Contains(stored.Error, wantError) {
+				t.Fatalf("terminal: status=%s completed=%v result=%q error=%q worker=%v", stored.Status, stored.CompletedAt, stored.ResultJSON, stored.Error, workerErr)
+			}
+			var resources int64
+			if err := db.Model(&model.Resource{}).Count(&resources).Error; err != nil {
+				t.Fatal(err)
+			}
+			if resources != 1 {
+				t.Fatalf("failed worker created output resources: %d", resources)
+			}
+		})
+	}
+}
+
+func TestTimelineRenderCancellationAfterOutputStored(t *testing.T) {
+	requireFFmpegTools(t)
+	svc, db := newTimelineTaskTestService(t)
+	svc.dataDir = t.TempDir()
+	source := seedLocalVideoResource(t, svc, "usr-render-test", 32, 32, nil)
+	project := renderTestProject("resource:" + source.ID)
+	queued, err := svc.CreateTimelineRenderTask("usr-render-test", TimelineRenderCreateRequest{Timeline: project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&model.Task{}).Where("id = ?", queued.ID).Updates(map[string]any{"status": model.TaskStatusRunning, "stage": "后端接管任务"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.repo.Task(queued.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled := false
+	if err := db.Callback().Update().Before("gorm:update").Register("test:cancel_before_render_completion", func(tx *gorm.DB) {
+		completion, ok := tx.Statement.Dest.(*model.Task)
+		if !ok || completion.ID != task.ID || completion.Status != model.TaskStatusSucceeded || cancelled {
+			return
+		}
+		cancelled = true
+		var count int64
+		if err := db.Model(&model.Resource{}).Count(&count).Error; err != nil {
+			tx.AddError(err)
+			return
+		}
+		if count != 2 {
+			tx.AddError(fmt.Errorf("expected persisted output before cancellation, got %d resources", count))
+			return
+		}
+		if _, err := svc.CancelTask(context.Background(), task.UserID, task.ID); err != nil {
+			tx.AddError(err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err = newTaskWorkerCoordinator(svc).processTimelineRender(task, context.Background())
+	if !cancelled || err == nil {
+		t.Fatalf("expected lost completion after cancellation, fired=%v err=%v", cancelled, err)
+	}
+	stored, loadErr := svc.repo.Task(task.ID)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if stored.Status != model.TaskStatusCancelled || stored.ResultJSON != "" {
+		t.Fatalf("cancel overwritten: %+v", stored)
+	}
+	var resources []model.Resource
+	if err := db.Find(&resources).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(resources) != 1 || resources[0].ID != source.ID {
+		t.Fatalf("orphan output remains: %+v", resources)
+	}
+	svc.drainResourceDeletionJobs(10)
+	var videos []string
+	if err := filepath.WalkDir(filepath.Join(svc.dataDir, "resources"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(path, ".mp4") {
+			videos = append(videos, path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(videos) != 1 {
+		t.Fatalf("orphan physical output remains: %v", videos)
 	}
 }
 

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -99,7 +100,7 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	durationMs := planDurationMs(plan)
 	fileName := fmt.Sprintf("timeline-render-%s.mp4", time.Now().Format("20060102-150405"))
 	outWidth, outHeight := plan.size()
-	resource, _, err := s.storeResource(task.UserID, "media", fileName, "video/mp4", stat.Size(), outWidth, outHeight, durationMs, file, nil, false)
+	resource, created, err := s.storeResource(task.UserID, "media", fileName, "video/mp4", stat.Size(), outWidth, outHeight, durationMs, file, nil, false)
 	if err != nil || resource == nil {
 		return w.failTimelineTask(task, "渲染失败", "保存渲染产物失败")
 	}
@@ -131,6 +132,13 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	completedAt := time.Now()
 	task.CompletedAt = &completedAt
 	if err := s.repo.SaveTaskCompletion(task, model.TaskStatusRunning, nil); err != nil {
+		// Cancellation can win while storage is writing. Reuse reference-aware cleanup;
+		// a committed/referenced result stays intact and physical deletion is retriable.
+		if created {
+			if cleanupErr := s.cleanupDetachedUserResources(task.UserID, []model.Resource{*resource}); cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("清理未提交渲染产物失败: %w", cleanupErr))
+			}
+		}
 		return fmt.Errorf("写入渲染完成态失败: %w", err)
 	}
 	s.logInfo(task.UserID, task.ID, fmt.Sprintf("时间线渲染完成，时长 %.1fs", float64(durationMs)/1000), "")

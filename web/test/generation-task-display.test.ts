@@ -13,6 +13,14 @@ import {
 } from "@/lib/generation-task-display";
 import { resetGenerationTaskMetadata } from "@/lib/canvas/canvas-task-state";
 
+test("local timeline rendering remains cancellable without relaxing paid generation", () => {
+    const task = { type: "timeline_render", provider: "local", model: "ffmpeg", status: "running" as const, stage: "正在渲染…" };
+    expect(canCancelGenerationTask(task)).toBe(true);
+    expect(canCancelGenerationTask({ ...task, providerRequestId: "upstream" })).toBe(false);
+    expect(canCancelGenerationTask({ ...task, type: "video" })).toBe(false);
+    expect(canCancelGenerationTask({ ...task, status: "succeeded" })).toBe(false);
+});
+
 describe("作品保存阶段", () => {
     test("分别表达生成、下载、上传和登记，不把保存失败当成生成失败", () => {
         expect(mediaDeliverySummary("failed", "download")).toBe("生成成功 · 下载失败");
