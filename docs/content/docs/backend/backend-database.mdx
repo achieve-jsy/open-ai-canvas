@@ -15,7 +15,7 @@ description: 影策后端核心持久化表与状态边界
 | advertising_revisions | 不可变确认内容；(project_id,source_revision)唯一 |
 | advertising_resource_references | (project_id,scope_key,resource_id)复合主键；scope_key为draft或确认版本ID，resource_id索引和RESTRICT外键保护媒体；项目父引用也限制删除 |
 
-latest指针由业务事务维护而非循环外键。普通素材删除报告广告占用；彻底删除素材入口和孤儿清理均保留广告草稿及确认版本引用的Resource。广告删除按expectedRevision事务清理自身内容并解绑画布，不删除独立媒体；PostgreSQL低频删除使用NOWAIT任务表锁，锁忙返回409以避免嵌套画布操作死锁。仅新增表不代表广告页面/确认流程已交付。新库、旧78库升级、重复迁移、快照复制及引用约束有SQLite测试；PostgreSQL测试需显式CANVAS_TEST_POSTGRES_DSN，未配置时跳过，不等同真实PG验收。
+latest指针由业务事务维护而非循环外键。普通素材删除报告广告占用；彻底删除素材入口和孤儿清理均保留广告草稿及确认版本引用的Resource。广告删除按expectedRevision事务清理自身内容并解绑画布，不删除独立媒体；PostgreSQL低频删除使用NOWAIT任务表锁，锁忙返回409以避免嵌套画布操作死锁。广告页面与确认流程已接线并通过自动验证；新广告ID保留ad_前缀，任务入队在计费前事务校验存在性并与删除锁配对。浏览器联调尚未执行。新库、旧78库升级、重复迁移、快照复制及引用约束有SQLite测试；PostgreSQL测试需显式CANVAS_TEST_POSTGRES_DSN，未配置时跳过，不等同真实PG验收。
 
 ## Agent 记忆文件列补齐（Schema 77）
 

@@ -5,6 +5,12 @@ description: 信封、错误码与 OpenAPI
 
 # HTTP API 合同
 
+## 广告项目接口
+
+`/ad-projects`列表/创建、`/:id`读取/保存/删除、`/:id/confirm`确认、`/:id/revisions`列表、`/:id/revisions/:revisionId`只读版本。全部登录鉴权且独立于短剧开关。写正文最多256KiB，拒绝未知字段、重复键、尾随JSON；分页最大100。
+
+原因码：`advertising_revision_conflict`(409)、`advertising_invalid_document`(400)、`advertising_resource_unavailable`(400)、`advertising_resource_in_use`(409)、`advertising_active_tasks`(409)。重名复用`project_name_conflict`。字段限制见OpenAPI；业务流程见[广告项目](./advertising-project)。
+
 ## 广告时间线合成
 
 `POST /api/timeline/renders` 接收时间线资源快照和可选业务项目ID。增强模式支持 output、文字/Logo overlay 和硬字幕；非法参数与不可用资源返回400，执行失败进入任务失败态。任务resultJson含subtitlesBurned和overlayCount，客户端不得自动退化或重复提交。详见[广告时间线合成基础](./advertising-render)。
