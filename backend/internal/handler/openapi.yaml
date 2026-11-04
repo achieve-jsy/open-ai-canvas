@@ -231,6 +231,327 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}/productions:
+    post:
+      tags: [projects]
+      summary: 创建或恢复确认版本制作
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingProductionCreate'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingProductionDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}:
+    get:
+      tags: [projects]
+      summary: 读取制作状态
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingProductionDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [projects]
+      summary: 保存完整制作设置
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingProductionSave'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingProductionDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/submissions:
+    get:
+      tags: [projects]
+      summary: 分页查询报价与候选
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingSubmissionPage'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 获取镜头报价，不生成
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingSubmissionRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingSubmissionDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/submissions/{submissionId}/execute:
+    post:
+      tags: [projects]
+      summary: 批准报价并幂等提交
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: submissionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingExecuteRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingSubmissionDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/assemblies:
+    get:
+      tags: [projects]
+      summary: 分页查询不可变组装
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingAssemblyPage'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 组装独立时间线画布
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingAssemblyRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingAssemblyDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/assemblies/{assemblyId}:
+    get:
+      tags: [projects]
+      summary: 读取组装及画布关联
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: assemblyId, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingAssemblyDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/assemblies/{assemblyId}/renders:
+    get:
+      tags: [projects]
+      summary: 分页查询渲染尝试
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: assemblyId, required: true, schema: {type: string}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingRenderPage'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 导出原组装，不覆盖旧任务
+      description: 登录鉴权，跨用户404；独立于短剧开关。写正文最多256KiB，拒绝未知或重复字段。生成必须显式批准报价；失败不自动重做。操作键幂等，所有列表pageSize最多100。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: assemblyId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingRenderRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingRenderDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "403": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+        "503": {$ref: '#/components/responses/Error'}
   /timeline/renders:
     post:
       tags: [tasks]
@@ -2783,6 +3104,156 @@ components:
       in: cookie
       name: open_ai_canvas_session
   schemas:
+    AdvertisingProductionCreate:
+      type: object
+      additionalProperties: false
+      required: [confirmedRevisionId]
+      properties:
+        confirmedRevisionId: {type: string}
+    AdvertisingSelection:
+      type: object
+      additionalProperties: false
+      properties:
+        videoSubmissionId: {type: string}
+        audioSubmissionId: {type: string}
+        videoStartMs: {type: integer, format: int64, minimum: 0}
+    AdvertisingProductionSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        ttsModelId: {type: string, maxLength: 120}
+        voiceId: {type: string, maxLength: 120}
+        selections: {type: object, additionalProperties: {$ref: '#/components/schemas/AdvertisingSelection'}}
+        musicResourceId: {type: string}
+        musicVolume: {type: number, minimum: 0, maximum: 1, default: 0.15}
+    AdvertisingProductionSave:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, settings]
+      properties:
+        expectedRevision: {type: integer, format: int64, minimum: 1}
+        settings: {$ref: '#/components/schemas/AdvertisingProductionSettings'}
+    AdvertisingProductionDetail:
+      type: object
+      properties:
+        production:
+          type: object
+          properties:
+            id: {type: string}
+            projectId: {type: string}
+            confirmedRevisionId: {type: string}
+            revision: {type: integer, format: int64}
+            createdAt: {type: string, format: date-time}
+            updatedAt: {type: string, format: date-time}
+        settings: {$ref: '#/components/schemas/AdvertisingProductionSettings'}
+        confirmedSnapshot: {$ref: '#/components/schemas/AdvertisingRevisionDetail'}
+    AdvertisingSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [clientOperationId, shotId, kind, modelId]
+      properties:
+        clientOperationId: {type: string, format: uuid}
+        shotId: {type: string, format: uuid}
+        kind: {type: string, enum: [video, audio]}
+        modelId: {type: string, maxLength: 120}
+        voiceId: {type: string, maxLength: 120}
+        format: {type: string, enum: ['', mp3, wav]}
+    AdvertisingExecuteRequest:
+      type: object
+      additionalProperties: false
+      required: [quoteHash]
+      properties:
+        quoteHash: {type: string}
+    AdvertisingTask:
+      type: object
+      description: 标准任务输出，含进度、结果与错误；不是新任务协议。
+      properties:
+        id: {type: string}
+        type: {type: string}
+        status: {type: string}
+        stage: {type: string}
+        progress: {type: integer}
+        resultJson: {type: string}
+        error: {type: string}
+    AdvertisingSubmissionDetail:
+      type: object
+      properties:
+        id: {type: string}
+        productionId: {type: string}
+        shotId: {type: string}
+        kind: {type: string, enum: [video, audio]}
+        requestHash: {type: string}
+        publicRequest: {type: object, description: 冻结的公开模型请求；无密钥}
+        quote:
+          type: object
+          properties:
+            model: {type: string}
+            billingMode: {type: string}
+            quantity: {type: number}
+            amountMicrocredits: {type: integer, format: int64}
+            estimated: {type: boolean}
+            expiresAt: {type: string, format: date-time}
+            quoteHash: {type: string}
+            options: {type: object}
+        task: {$ref: '#/components/schemas/AdvertisingTask'}
+    AdvertisingAssemblyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, clientOperationId]
+      properties:
+        expectedRevision: {type: integer, format: int64, minimum: 1}
+        clientOperationId: {type: string, format: uuid}
+        fit: {type: string, enum: [pad, crop], default: pad}
+    AdvertisingAssemblyDetail:
+      type: object
+      properties:
+        id: {type: string}
+        productionId: {type: string}
+        clientOperationId: {type: string, format: uuid}
+        sourceProductionRevision: {type: integer, format: int64}
+        selectionHash: {type: string}
+        timeline: {$ref: '#/components/schemas/TimelineRenderProject'}
+        canvasId: {type: string, description: 画布删除后省略，不影响原组装}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    AdvertisingRenderRequest:
+      type: object
+      additionalProperties: false
+      required: [clientOperationId]
+      properties:
+        clientOperationId: {type: string, format: uuid}
+    AdvertisingRenderDetail:
+      type: object
+      properties:
+        id: {type: string}
+        assemblyId: {type: string}
+        clientOperationId: {type: string, format: uuid}
+        taskId: {type: string}
+        createdAt: {type: string, format: date-time}
+        task: {$ref: '#/components/schemas/AdvertisingTask'}
+        available: {type: boolean, description: 任务成功且已探测通过的产物当前可读取时才为true}
+        resourceId: {type: string}
+    AdvertisingSubmissionPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingSubmissionDetail'}}
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer, format: int64}
+    AdvertisingAssemblyPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingAssemblyDetail'}}
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer, format: int64}
+    AdvertisingRenderPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingRenderDetail'}}
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer, format: int64}
     AdvertisingBrief:
       type: object
       additionalProperties: false
@@ -2966,6 +3437,7 @@ components:
               durationMs: {type: integer, minimum: 1}
               sourceStartMs: {type: integer, minimum: 0}
               sourceDurationMs: {type: integer}
+              volume: {type: number, default: 1, description: 显式0表示静音，缺省为1}
               text: {type: string, description: 增强模式最多200 Unicode字符和两行}
               overlay: {$ref: "#/components/schemas/TimelineRenderOverlay"}
               directMedia:
@@ -2974,6 +3446,7 @@ components:
                 properties:
                   id: {type: string}
                   kind: {type: string}
+                  assetId: {type: string, description: 已保存画布的匹配素材ID}
                   storageKey: {type: string, description: 'resource:<当前用户就绪资源ID>，禁止URL和本机路径'}
     TimelineRenderResult:
       type: object

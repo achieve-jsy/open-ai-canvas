@@ -64,7 +64,9 @@ test("advertising form edits stable shots and explicit seconds without discardin
         const { setActiveUserScope } = await import("../src/lib/user-scope");
         let uploadResult: any = { storageKey: "local:test", pendingRemoteUpload: true, mimeType: "image/png" };
         let finishUpload: ((v: any) => void) | undefined;
+        const fileStorage = await import("../src/services/file-storage");
         mock.module("../src/services/file-storage", () => ({
+            ...fileStorage,
             uploadMediaFile: async () =>
                 uploadResult === "wait"
                     ? new Promise((resolve) => {

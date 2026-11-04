@@ -11,6 +11,7 @@ import { ADVERTISING_REASONS } from "@/services/api/error-codes";
 import * as api from "@/services/api/advertising-project";
 import { AdvertisingDraftForm } from "./advertising-draft-form";
 import { AdvertisingAssets } from "./advertising-assets";
+import { AdvertisingProduction } from "./advertising-production";
 import "./advertising.css";
 
 export default function AdvertisingDetailPage() {
@@ -192,6 +193,7 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
                     )}
                     <AdvertisingAssets value={draft} onChange={setDraft} resources={saved.resources} disabled={busy} onBusy={setUploading} />
                     <AdvertisingDraftForm value={draft} onChange={setDraft} disabled={busy || uploading} />
+                    <AdvertisingProduction key={saved.latestConfirmedRevisionId || "unconfirmed"} projectId={id} userId={userId} confirmedRevisionId={saved.latestConfirmedRevisionId} />
                     <section className="ad-section">
                         <h2>确认历史</h2>
                         <p>确认快照只读，不包含临时签名URL。</p>
@@ -241,6 +243,7 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
                         <h2>{history.data.snapshot.name}</h2>
                         <p>来源修订 {history.data.sourceRevision}</p>
                         <AdvertisingDraftForm value={history.data.snapshot.draft} onChange={() => {}} disabled />
+                        <AdvertisingProduction key={history.data.id} projectId={id} userId={userId} confirmedRevisionId={history.data.id} />
                         <h3>冻结资源</h3>
                         <ul>
                             {history.data.snapshot.resources.map((r) => (
