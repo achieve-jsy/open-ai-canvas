@@ -23,10 +23,7 @@ export type TimelineTranscriptionSegment = {
     text: string;
 };
 
-export async function createTimelineTranscriptionTask(
-    payload: TimelineTranscriptionCreateRequest,
-    signal?: AbortSignal,
-): Promise<GenerationTask> {
+export async function createTimelineTranscriptionTask(payload: TimelineTranscriptionCreateRequest, signal?: AbortSignal): Promise<GenerationTask> {
     return http.post<GenerationTask>("/timeline/transcriptions", payload, { signal });
 }
 
@@ -35,7 +32,7 @@ export async function createTimelineTranscriptionTask(
 // 任务完成后由任务中心读取 ResultJSON，并按 TimelineRenderResult 解包。
 
 export type TimelineRenderCreateRequest = {
-    projectId: string;
+    projectId?: string;
     timeline: TimelineProject;
 };
 
@@ -45,11 +42,13 @@ export type TimelineRenderResult = {
     size?: number;
     durationMs?: number;
     subtitleSrt?: string;
+    width?: number;
+    height?: number;
+    fit?: "auto" | "pad" | "crop";
+    subtitlesBurned?: boolean;
+    overlayCount?: number;
 };
 
-export async function createTimelineRenderTask(
-    payload: TimelineRenderCreateRequest,
-    signal?: AbortSignal,
-): Promise<GenerationTask> {
+export async function createTimelineRenderTask(payload: TimelineRenderCreateRequest, signal?: AbortSignal): Promise<GenerationTask> {
     return http.post<GenerationTask>("/timeline/renders", payload, { signal });
 }

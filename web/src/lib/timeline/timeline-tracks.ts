@@ -41,11 +41,12 @@ export function normalizeTimelineProject(timeline: Partial<TimelineProject> | nu
         return true;
     });
     const baseTracks = createDefaultTracks();
-    const tracks = [...baseTracks, ...deduped.filter((track) => !baseTracks.some((base) => base.id === track.id))];
+    const tracks = [...deduped, ...baseTracks.filter((track) => !seen.has(track.id))];
     const clips = Array.isArray(timeline?.clips) ? timeline.clips : [];
     const durationMs = clips.reduce((max, clip) => Math.max(max, clip.startMs + clip.durationMs), 0);
     return {
         version: 2,
+        output: timeline?.output,
         tracks,
         clips,
         durationMs,

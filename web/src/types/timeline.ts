@@ -87,6 +87,25 @@ export type TimelineDirectMedia = {
     mimeType?: string;
 };
 
+export type TimelineOutput = {
+    width: number;
+    height: number;
+    fit: "auto" | "pad" | "crop";
+    burnSubtitles: boolean;
+};
+
+export type TimelineOverlay = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    opacity?: number;
+    fontSize?: number;
+    color?: string;
+    background?: string;
+    align?: "left" | "center" | "right";
+};
+
 export type TimelineClip = {
     id: string;
     kind: TimelineClipKind;
@@ -108,10 +127,12 @@ export type TimelineClip = {
     text?: string;
     /** 仅时间线作用域的直连媒体；存在时预览/导出优先从该字段解析，不再回画布查节点 */
     directMedia?: TimelineDirectMedia;
+    overlay?: TimelineOverlay;
 };
 
 export type TimelineProject = {
     version: 2;
+    output?: TimelineOutput;
     tracks: TimelineTrack[];
     clips: TimelineClip[];
     /** 时间线总时长（毫秒），取所有片段末端最大值 */

@@ -17,16 +17,36 @@ import (
 // 输入布局统一为「每个片段两个输入：视频源 + 音频源」，空隙展开为独立
 // 黑场片段，因此第 i 个片段的视频输入为 2i、音频输入为 2i+1。
 
+type renderOutput struct {
+	Width         int    `json:"width"`
+	Height        int    `json:"height"`
+	Fit           string `json:"fit"`
+	BurnSubtitles bool   `json:"burnSubtitles"`
+}
+
+type renderOverlay struct {
+	X          float64  `json:"x"`
+	Y          float64  `json:"y"`
+	Width      float64  `json:"width"`
+	Height     float64  `json:"height"`
+	Opacity    *float64 `json:"opacity,omitempty"`
+	FontSize   *float64 `json:"fontSize,omitempty"`
+	Color      string   `json:"color,omitempty"`
+	Background string   `json:"background,omitempty"`
+	Align      string   `json:"align,omitempty"`
+}
+
 type renderClip struct {
-	ID               string  `json:"id"`
-	Kind             string  `json:"kind"`
-	TrackID          string  `json:"trackId"`
-	StartMs          int64   `json:"startMs"`
-	DurationMs       int64   `json:"durationMs"`
-	SourceStartMs    int64   `json:"sourceStartMs"`
-	SourceDurationMs int64   `json:"sourceDurationMs"`
-	Volume           float64 `json:"volume"`
-	Text             string  `json:"text"`
+	Overlay          *renderOverlay `json:"overlay,omitempty"`
+	ID               string         `json:"id"`
+	Kind             string         `json:"kind"`
+	TrackID          string         `json:"trackId"`
+	StartMs          int64          `json:"startMs"`
+	DurationMs       int64          `json:"durationMs"`
+	SourceStartMs    int64          `json:"sourceStartMs"`
+	SourceDurationMs int64          `json:"sourceDurationMs"`
+	Volume           float64        `json:"volume"`
+	Text             string         `json:"text"`
 	// FadeIn/FadeOut 是片段首尾的纯色淡入淡出（短剧黑场、闪白转场）；为 0 时是硬切。
 	FadeInMs     int64  `json:"fadeInMs,omitempty"`
 	FadeInColor  string `json:"fadeInColor,omitempty"`
@@ -40,6 +60,7 @@ type renderClip struct {
 }
 
 type renderTrack struct {
+	Order   int    `json:"order"`
 	ID      string `json:"id"`
 	Kind    string `json:"kind"`
 	Visible *bool  `json:"visible"`
@@ -47,6 +68,7 @@ type renderTrack struct {
 }
 
 type renderProject struct {
+	Output     *renderOutput `json:"output,omitempty"`
 	Version    int           `json:"version"`
 	Tracks     []renderTrack `json:"tracks"`
 	Clips      []renderClip  `json:"clips"`
