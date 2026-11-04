@@ -200,6 +200,19 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*model.Task,
 			return nil, BadAuthRequest("Agent 暂不支持当前模型计费方式")
 		}
 	}
+	if req.advertisingAdmission != nil && billingOrder != nil {
+		if billingOrder.AmountMicrocredits > req.advertisingAdmission.MaxCharge || req.advertisingAdmission.MaxCharge < 0 {
+			return nil, BadAuthRequest("模型报价超过广告批准额度，请重新报价确认")
+		}
+		switch billingOrder.BillingMode {
+		case "fixed_request", "per_second", "token":
+			billingOrder.ChargeLimitSet = true
+			billingOrder.ChargeLimitMicrocredits = billingOrder.AmountMicrocredits
+			task.AuthorizedChargeMicrocredits = billingOrder.AmountMicrocredits
+		default:
+			return nil, BadAuthRequest("广告生成暂不支持当前计费方式")
+		}
+	}
 	if req.creationPrepare != nil {
 		encoded, encodeErr := json.Marshal(normalizedInput)
 		if encodeErr != nil {
