@@ -15,6 +15,7 @@ import { AlertTriangle, Captions, Check, ChevronDown, Download, Film, Gauge, Ima
 import { useEditorStoreContext } from "@/components/editor/editor-context";
 import { formatTimelineTime } from "@/lib/timeline/timeline-view";
 import { TimelineOverlayPreview } from "@/components/canvas/timeline-overlay-preview";
+import { timelineClipFitMode } from "@/lib/timeline/timeline-to-ffmpeg";
 import { getPreviewClipAtTime } from "@/lib/timeline/timeline-clip-view";
 import { resolveMediaUrl } from "@/services/file-storage";
 import { playbackVariantUrl, refreshResource, resourceFileUrl, resourceIdFromStorageKey } from "@/services/api/resources";
@@ -418,7 +419,11 @@ export function EditorPreviewMonitor() {
                             playsInline
                             preload="auto"
                             className="max-h-full max-w-full object-contain"
-                            style={project?.output ? { width: "100%", height: "100%", objectFit: project.output.fit === "crop" ? "cover" : "contain" } : undefined}
+                            style={
+                                project?.output
+                                    ? { width: "100%", height: "100%", objectFit: (project.output.fit === "auto" ? timelineClipFitMode(activeClip?.directMedia ?? {}, project.output) : project.output.fit) === "crop" ? "cover" : "contain" }
+                                    : undefined
+                            }
                             onError={handleMediaError}
                             onLoadedMetadata={handleLoadedMetadata}
                             onEnded={handleVideoEnded}
@@ -429,7 +434,11 @@ export function EditorPreviewMonitor() {
                             src={imageSrc}
                             alt=""
                             className="max-h-full max-w-full object-contain"
-                            style={project?.output ? { width: "100%", height: "100%", objectFit: project.output.fit === "crop" ? "cover" : "contain" } : undefined}
+                            style={
+                                project?.output
+                                    ? { width: "100%", height: "100%", objectFit: (project.output.fit === "auto" ? timelineClipFitMode(activeClip?.directMedia ?? {}, project.output) : project.output.fit) === "crop" ? "cover" : "contain" }
+                                    : undefined
+                            }
                             onError={handleMediaError}
                         />
                     ) : null}

@@ -1,4 +1,5 @@
 import { TimelineOverlayControls } from "./timeline-overlay-controls";
+import { assertTimelineTextFits } from "@/lib/timeline/timeline-text-overflow";
 import { resolveTimelineRenderSnapshot } from "@/lib/timeline/timeline-render-snapshot";
 import { createTimelineRenderTask, type TimelineRenderResult } from "@/services/api/timeline-tasks";
 import { waitForGenerationTask } from "@/services/api/task-center";
@@ -595,6 +596,7 @@ export function CanvasTimelineDialog({
             setExportPercent(0);
             setExportDetail("提交服务端渲染…");
             try {
+                await assertTimelineTextFits(snapshot);
                 const created = await createTimelineRenderTask({ timeline: snapshot });
                 setRenderTaskId(created.id);
                 const done = await waitForGenerationTask(created.id, {
@@ -1027,7 +1029,7 @@ export function CanvasTimelineDialog({
                 </div>
                 {draft.clips.find((c) => c.id === selectedClipId) && (
                     <div className="max-h-64 overflow-y-auto">
-                        <TimelineOverlayControls clip={draft.clips.find((c) => c.id === selectedClipId)!} onChange={(c) => updateClip(c.id, c)} />
+                        <TimelineOverlayControls output={draft.output} clip={draft.clips.find((c) => c.id === selectedClipId)!} onChange={(c) => updateClip(c.id, c)} />
                     </div>
                 )}
                 <CanvasTimelinePreview timeline={draft} clips={draft.clips} nodes={nodes} playheadMs={playheadMs} playing={previewPlaying} theme={theme} onTogglePlay={() => setPreviewPlaying((value) => !value)} onPlayheadChange={setPlayheadMs} />
@@ -1173,7 +1175,7 @@ export function CanvasTimelineDialog({
                         options={exportPresetOptions.map((option) => ({ value: option.value, label: option.label }))}
                         onChange={(value: TimelineExportPreset) => {
                             setExportPreset(value);
-                            applyDraft((p) => ({ ...p, output: { ...resolveTimelineExportSize(value, { firstClipSize, dramaAspectRatio }), fit: p.output?.fit ?? "pad", burnSubtitles: p.output?.burnSubtitles ?? true } }));
+                            if (draft.output) applyDraft((p) => ({ ...p, output: { ...resolveTimelineExportSize(value, { firstClipSize, dramaAspectRatio }), fit: p.output?.fit ?? "pad", burnSubtitles: p.output?.burnSubtitles ?? true } }));
                         }}
                     />
                     {exportFitLabel ? (

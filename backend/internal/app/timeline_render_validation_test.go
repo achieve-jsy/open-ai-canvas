@@ -21,20 +21,22 @@ func TestValidateEnhancedRenderProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]func(*renderProject){
-		"negative start":    func(p *renderProject) { p.Clips[0].StartMs = -1 },
-		"zero duration":     func(p *renderProject) { p.Clips[0].DurationMs = 0 },
-		"source offset":     func(p *renderProject) { p.Clips[0].SourceStartMs = -1 },
-		"overflow duration": func(p *renderProject) { p.Clips[0].DurationMs = math.MaxInt64 },
-		"nan":               func(p *renderProject) { p.Clips[1].Overlay.X = math.NaN() },
-		"infinite":          func(p *renderProject) { p.Clips[1].Overlay.Y = math.Inf(1) },
-		"offscreen":         func(p *renderProject) { p.Clips[1].Overlay.X = .9 },
-		"fontsize":          func(p *renderProject) { v := .2; p.Clips[1].Overlay.FontSize = &v },
-		"opacity":           func(p *renderProject) { v := 2.; p.Clips[1].Overlay.Opacity = &v },
-		"color":             func(p *renderProject) { p.Clips[1].Overlay.Color = "white;bad" },
-		"align":             func(p *renderProject) { p.Clips[1].Overlay.Align = "bad" },
-		"text length":       func(p *renderProject) { p.Clips[1].Text = strings.Repeat("中", 201) },
-		"text lines":        func(p *renderProject) { p.Clips[1].Text = "a\nb\nc" },
-		"duration cap":      func(p *renderProject) { p.DurationMs = 60001 },
+		"legacy size bypass": func(p *renderProject) { p.Output = nil; p.Width = 4096; p.Height = 4096 },
+		"legacy fit bypass":  func(p *renderProject) { p.Output = nil; p.Fit = "bad" },
+		"negative start":     func(p *renderProject) { p.Clips[0].StartMs = -1 },
+		"zero duration":      func(p *renderProject) { p.Clips[0].DurationMs = 0 },
+		"source offset":      func(p *renderProject) { p.Clips[0].SourceStartMs = -1 },
+		"overflow duration":  func(p *renderProject) { p.Clips[0].DurationMs = math.MaxInt64 },
+		"nan":                func(p *renderProject) { p.Clips[1].Overlay.X = math.NaN() },
+		"infinite":           func(p *renderProject) { p.Clips[1].Overlay.Y = math.Inf(1) },
+		"offscreen":          func(p *renderProject) { p.Clips[1].Overlay.X = .9 },
+		"fontsize":           func(p *renderProject) { v := .2; p.Clips[1].Overlay.FontSize = &v },
+		"opacity":            func(p *renderProject) { v := 2.; p.Clips[1].Overlay.Opacity = &v },
+		"color":              func(p *renderProject) { p.Clips[1].Overlay.Color = "white;bad" },
+		"align":              func(p *renderProject) { p.Clips[1].Overlay.Align = "bad" },
+		"text length":        func(p *renderProject) { p.Clips[1].Text = strings.Repeat("中", 201) },
+		"text lines":         func(p *renderProject) { p.Clips[1].Text = "a\nb\nc" },
+		"duration cap":       func(p *renderProject) { p.DurationMs = 60001 },
 		"clip cap": func(p *renderProject) {
 			for range 32 {
 				c := p.Clips[1]

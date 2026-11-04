@@ -1,6 +1,7 @@
 // 默认由后端 ffmpeg 渲染并把产物写入资源存储；浏览器 ffmpeg.wasm 只承担离线降级。
 // 服务端快照拒绝缺失引用，增强时间线不静默降级。
 
+import { assertTimelineTextFits } from "@/lib/timeline/timeline-text-overflow";
 import { resolveTimelineRenderSnapshot } from "@/lib/timeline/timeline-render-snapshot";
 import { TimelineOverlayControls } from "@/components/canvas/timeline-overlay-controls";
 import { useMemo, useState } from "react";
@@ -60,6 +61,7 @@ export function EditorExport() {
         setState({ phase: "running", mode: "remote", percent: 0, detail: "提交渲染任务…", result: null });
         try {
             const snapshot = resolveTimelineRenderSnapshot(project, () => undefined);
+            await assertTimelineTextFits(snapshot);
             const created = await createTimelineRenderTask({ timeline: snapshot });
             setTaskId(created.id);
             const done = await waitForGenerationTask(created.id, {
@@ -149,6 +151,7 @@ export function EditorExport() {
                 </button>
                 {selected && (
                     <TimelineOverlayControls
+                        output={project?.output}
                         clip={selected}
                         onChange={(clip) => {
                             dispatch({ op: "setClipProperty", payload: { id: clip.id, patch: { text: clip.text, overlay: clip.overlay } } });

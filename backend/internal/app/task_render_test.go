@@ -64,6 +64,30 @@ func seedRunningRenderTask(t *testing.T, db *gorm.DB, inputJSON string) *model.T
 	return task
 }
 
+func TestRenderImageMIMEIsNotAPath(t *testing.T) {
+	for mime, want := range map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/png/invalid": ".bin", "image/../../escape": ".bin"} {
+		if got := extForMime(mime); got != want {
+			t.Fatalf("extension %q: %q want %q", mime, got, want)
+		}
+	}
+	svc, _ := newTimelineTaskTestService(t)
+	svc.dataDir = t.TempDir()
+	resource, _, err := svc.storeResource("usr-render-test", "media", "image.png", "image/png/invalid", 3, 1, 1, 0, strings.NewReader("bad"), nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := renderTestProject("resource:" + resource.ID)
+	p.Clips[0].Kind = "image"
+	plan := buildRenderPlan(p)
+	_, cleanup, err := materializeRenderSources(context.Background(), svc, "usr-render-test", &plan)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err == nil || !strings.Contains(err.Error(), "不支持的图片类型") {
+		t.Fatalf("want rejected MIME, got %v", err)
+	}
+}
+
 func TestCreateTimelineRenderTaskQueues(t *testing.T) {
 	svc, db := newTimelineTaskTestService(t)
 	seedResource(t, db, "res-1", "usr-render-test", "video/mp4")

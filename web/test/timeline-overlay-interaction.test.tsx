@@ -59,6 +59,34 @@ test("native overlay controls edit text, placement and Logo without losing saved
         await act(render);
         await act(() => host.querySelector("button")!.click());
         expect(clip.overlay).toEqual({ x: 0.8, y: 0.05, width: 0.15, height: 0.1 });
+        const { CanvasTimelinePreview } = await import("../src/components/canvas/canvas-timeline-preview");
+        const { canvasThemes } = await import("../src/lib/canvas-theme");
+        let time = 0;
+        let stopped = false;
+        const timeline = { version: 2 as const, durationMs: 120, tracks: [{ id: "image", kind: "image" as const, label: "image", order: 0 }], clips: [{ ...clip, id: "still", trackId: "image", startMs: 0, durationMs: 60, overlay: undefined }] };
+        const preview = () =>
+            root.render(
+                <CanvasTimelinePreview
+                    timeline={timeline}
+                    clips={timeline.clips}
+                    nodes={[]}
+                    playheadMs={time}
+                    playing={!stopped}
+                    theme={canvasThemes.dark}
+                    onTogglePlay={() => {
+                        stopped = true;
+                        preview();
+                    }}
+                    onPlayheadChange={(ms) => {
+                        time = ms;
+                        preview();
+                    }}
+                />,
+            );
+        await act(preview);
+        await act(() => new Promise((resolve) => setTimeout(resolve, 180)));
+        expect(time).toBe(120);
+        expect(stopped).toBe(true);
     } finally {
         await act(() => root.unmount());
         for (const [key, d] of originals) {

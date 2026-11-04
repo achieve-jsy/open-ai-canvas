@@ -33,6 +33,16 @@ func validateEnhancedRenderProject(p renderProject) error {
 	if p.Version != 2 || p.DurationMs <= 0 || p.DurationMs > 60000 {
 		return invalid("版本或时长超出范围")
 	}
+	if p.Output == nil {
+		for _, size := range []int{p.Width, p.Height} {
+			if size != 0 && (size < 16 || size > 1920 || size%2 != 0) {
+				return invalid("输出尺寸须为16–1920的偶数")
+			}
+		}
+		if p.Fit != "" && p.Fit != "auto" && p.Fit != "pad" && p.Fit != "crop" {
+			return invalid("画面适配模式")
+		}
+	}
 	if o := p.Output; o != nil {
 		if o.Width < 16 || o.Height < 16 || o.Width > 1920 || o.Height > 1920 || o.Width%2 != 0 || o.Height%2 != 0 {
 			return invalid("输出尺寸须为16–1920的偶数")

@@ -1,7 +1,9 @@
+import { timelineTextOverflows } from "@/lib/timeline/timeline-text-overflow";
+import type { TimelineOutput } from "@/types/timeline";
 import { useState } from "react";
 import type { TimelineClip, TimelineOverlay } from "@/types/timeline";
 
-export function TimelineOverlayControls({ clip, onChange }: { clip: TimelineClip; onChange: (clip: TimelineClip) => void }) {
+export function TimelineOverlayControls({ clip, output, onChange }: { clip: TimelineClip; output?: TimelineOutput; onChange: (clip: TimelineClip) => void }) {
     const [error, setError] = useState("");
     if (clip.kind !== "text" && clip.kind !== "image") return null;
     const overlay = clip.overlay ?? (clip.kind === "image" ? { x: 0.8, y: 0.05, width: 0.15, height: 0.1 } : { x: 0.1, y: 0.1, width: 0.8, height: 0.2 });
@@ -100,6 +102,11 @@ export function TimelineOverlayControls({ clip, onChange }: { clip: TimelineClip
                 </>
             )}
             <p className="col-span-2 text-[var(--text-secondary)]">固定中文字体，最多两行、200字；文字过宽请缩小字号或手动换行。预览近似，最终以服务端成片为准。</p>
+            {timelineTextOverflows(clip, output) && (
+                <p className="col-span-2" role="alert">
+                    文字超出框，请缩小字号、加大框或手动换行；导出前必须调整。
+                </p>
+            )}
             {(overlay.x + overlay.width > 1 || overlay.y + overlay.height > 1 || Array.from(clip.text ?? "").length > 200 || (clip.text ?? "").split("\n").length > 2) && (
                 <p className="col-span-2" role="alert">
                     位置超框或文字过长，请调整后导出。

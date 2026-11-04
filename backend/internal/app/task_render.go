@@ -215,8 +215,10 @@ func materializeRenderSources(ctx context.Context, s *Service, userID string, pl
 			}
 			// 扩展名决定 ffmpeg 的解复用器；图片以 .mp4 命名会让 -loop 输入失败。
 			ext := extForMime(resource.MimeType)
-			if strings.HasPrefix(resource.MimeType, "image/") {
-				ext = "." + strings.TrimPrefix(strings.SplitN(resource.MimeType, ";", 2)[0], "image/")
+			if strings.HasPrefix(strings.ToLower(resource.MimeType), "image/") && ext == ".bin" {
+				reader.Close()
+				cleanup()
+				return "", nil, fmt.Errorf("不支持的图片类型")
 			}
 			path := filepath.Join(tmpDir, fmt.Sprintf("src-%d%s", len(cache), ext))
 			file, err := os.Create(path)

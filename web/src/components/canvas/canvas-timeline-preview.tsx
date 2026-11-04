@@ -3,6 +3,7 @@ import { Pause, Play } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { resolveMediaUrl } from "@/services/file-storage";
+import { timelineClipFitMode } from "@/lib/timeline/timeline-to-ffmpeg";
 import { formatTimelineTime } from "@/lib/timeline/timeline-view";
 import { createDefaultSubtitleStyle } from "@/types/timeline";
 import type { TimelineClip, TimelineProject } from "@/types/timeline";
@@ -50,6 +51,21 @@ export function CanvasTimelinePreview({ timeline, clips: allClips, nodes, playhe
         // subtitleEntryIndex 与字幕条目 index 同为 1 基，直接匹配，不再 +1（此前高亮永远匹配不上）。
         return (activeNode.metadata?.subtitleHighlights || []).find((item) => item.entryIndex === activeSubtitleClip.subtitleEntryIndex);
     }, [activeNode, activeSubtitleClip]);
+
+    // A timeline clock keeps stills, gaps and trailing text moving even without video events.
+    useEffect(() => {
+        if (!timeline || !playing) return;
+        const started = performance.now();
+        const timer = window.setInterval(() => {
+            const next = Math.min(timeline.durationMs, playheadMs + Math.round(performance.now() - started));
+            onPlayheadChange(next);
+            if (next >= timeline.durationMs) {
+                window.clearInterval(timer);
+                onTogglePlay();
+            }
+        }, 33);
+        return () => window.clearInterval(timer);
+    }, [timeline, playing, playheadMs, onPlayheadChange, onTogglePlay]);
 
     // 解析当前片段视频地址（与字幕弹窗同一套缓存/回退策略）。
     useEffect(() => {
@@ -101,7 +117,7 @@ export function CanvasTimelinePreview({ timeline, clips: allClips, nodes, playhe
 
     const handleTimeUpdate = () => {
         const video = videoRef.current;
-        if (!video || !activeVideoClip || !playing) return;
+        if (timeline || !video || !activeVideoClip || !playing) return;
         const sourceStartSec = (activeVideoClip.sourceStartMs || 0) / 1000;
         const timelineMs = activeVideoClip.startMs + Math.round((video.currentTime - sourceStartSec) * 1000);
         onPlayheadChange(Math.max(0, timelineMs));
@@ -128,6 +144,8 @@ export function CanvasTimelinePreview({ timeline, clips: allClips, nodes, playhe
         return { width: Math.round(width), height: Math.round(height) };
     }, [videoSize]);
 
+    const fit = timeline?.output?.fit === "auto" ? timelineClipFitMode(videoSize ?? activeVideoClip?.directMedia ?? {}, timeline.output) : timeline?.output?.fit;
+    const objectFit = fit === "crop" ? "cover" : "contain";
     return (
         <div className="flex items-center gap-3 border-b px-4 py-2" style={{ borderColor: theme.toolbar.border, background: theme.toolbar.panel }}>
             <div
@@ -139,11 +157,11 @@ export function CanvasTimelinePreview({ timeline, clips: allClips, nodes, playhe
                     <>
                         <div className="relative" style={!timeline?.output && previewDisplay ? { width: previewDisplay.width, height: previewDisplay.height } : { width: "100%", height: "100%" }}>
                             {activeVideoClip.kind === "image" ? (
-                                <img src={videoUrl} alt={activeVideoClip.title || "画面"} className="h-full w-full object-contain" />
+                                <img src={videoUrl} alt={activeVideoClip.title || "画面"} className="h-full w-full" style={{ objectFit }} onLoad={(e) => setVideoSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })} />
                             ) : (
                                 <video
                                     muted={timeline?.tracks.find((t) => t.id === activeVideoClip.trackId)?.muted}
-                                    style={{ objectFit: timeline?.output?.fit === "crop" ? "cover" : "contain" }}
+                                    style={{ objectFit }}
                                     ref={videoRef}
                                     className="block h-full w-full"
                                     src={videoUrl}

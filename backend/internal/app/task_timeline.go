@@ -166,6 +166,16 @@ func prepareWhisperWav(ctx context.Context, reader io.Reader, mime string) (stri
 }
 
 func extForMime(mime string) string {
+	switch strings.ToLower(strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])) {
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "image/webp":
+		return ".webp"
+	case "image/gif":
+		return ".gif"
+	}
 	switch {
 	case strings.HasPrefix(mime, "video/mp4"), strings.HasPrefix(mime, "audio/mp4"):
 		return ".mp4"
