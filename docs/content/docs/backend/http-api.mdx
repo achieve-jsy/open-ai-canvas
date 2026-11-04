@@ -5,6 +5,10 @@ description: 信封、错误码与 OpenAPI
 
 # HTTP API 合同
 
+## 广告时间线合成
+
+`POST /api/timeline/renders` 接收时间线资源快照和可选业务项目ID。增强模式支持 output、文字/Logo overlay 和硬字幕；非法参数与不可用资源返回400，执行失败进入任务失败态。任务resultJson含subtitlesBurned和overlayCount，客户端不得自动退化或重复提交。详见[广告时间线合成基础](./advertising-render)。
+
 ## 画布实时会话
 
 `GET /api/canvas-projects/:id/realtime` 使用登录 Cookie 升级为 WebSocket，握手校验当前用户对画布的归属和请求 Origin。首帧 `welcome` 提供服务端分配的 `selfId` 和窗口 Presence；客户端发送 `presence`，服务端推送 `peer`、`leave`、`invalidate` 和 `heartbeat`。Presence 只含有界世界坐标和拖拽矩形，不包含密钥、编辑租约 token、画布正文或实际保存指令。

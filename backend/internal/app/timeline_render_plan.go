@@ -12,7 +12,7 @@ import (
 // 时间线渲染：把前端 TimelineProject 快照（tracks/clips 平铺，见
 // web/src/types/timeline.ts TimelineProject v2）展开为可执行的 ffmpeg 步骤。
 // 与前端 timeline-to-ffmpeg.ts 保持同一数据流：trim（按 sourceStartMs 裁切）
-// → 空隙补黑场静音 → concat。字幕不烧录（依赖 libass），单独产出 SRT。
+// → 空隙补黑场静音 → concat → Logo/ASS叠加。增强模式按output烧录字幕；同时保留SRT。
 //
 // 输入布局统一为「每个片段两个输入：视频源 + 音频源」，空隙展开为独立
 // 黑场片段，因此第 i 个片段的视频输入为 2i、音频输入为 2i+1。

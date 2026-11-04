@@ -5,6 +5,12 @@ description: 从产品功能快速定位主要代码入口
 
 # 代码功能地图
 
+## 广告时间线合成基础
+
+- 后端：`internal/app/timeline_render_validation.go`（增强参数/资源归属）、`timeline_render_overlays.go`（固定字体ASS与Logo）、`timeline_render_plan.go`/`task_render.go`（既有渲染计划及worker）。
+- 前端：`lib/timeline/timeline-render-snapshot.ts`（快照和浏览器拒绝边界）、`components/canvas/timeline-overlay-controls.tsx`/`timeline-overlay-preview.tsx`（两模块复用）。画布时间线与编辑器插件接线，独立插件宿主尚待确认。
+- 回归：`timeline_render_smoke_test.go`真实FFmpeg，`timeline-overlays.test.tsx`和`timeline-overlay-interaction.test.tsx`组件与命令验证。
+
 ## 短剧自动制作
 
 - 纯逻辑：`backend/internal/production/`（作品圣经、分集与剧本提示词 `prompts.go`，模型输出解析 `parse.go`，分镜规则与时长 `storyboard.go` / `timing.go`，按视频模型上限切剧情段 `SegmentShotsForVideo`，段提示词素材稿 `segment_prompt.go` 与撰写要求 `segment_writer.go`，参考图方案 `assets.go`，用户分镜表直接导入 `storyboard_import.go`，原文台词逐句核对 `dialogue_check.go`）。

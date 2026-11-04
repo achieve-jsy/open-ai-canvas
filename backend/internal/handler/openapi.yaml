@@ -32,6 +32,31 @@ tags:
   - name: referral
     description: 推广中心：推广码、邀请记录与返佣
 paths:
+  /timeline/renders:
+    post:
+      tags: [tasks]
+      summary: 创建时间线服务端合成任务
+      description: |
+        快照引用当前用户的就绪资源，创建和执行时均校验归属。无模型调用。
+        output、text 或 overlay 启用增强校验：最长60秒，最多32个可见片段、16个文字/Logo层；主画面不可重叠。
+        异步失败写入任务失败态，不退化为漏字幕或Logo的成功视频。通过任务接口查询原任务，勿自动重复提交。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timeline]
+              properties:
+                projectId: {type: string, description: 可选的业务Project ID，不是画布ID}
+                timeline: {$ref: "#/components/schemas/TimelineRenderProject"}
+      responses:
+        "200":
+          description: 成功信封data为异步Task；成功后的resultJson是TimelineRenderResult的JSON字符串
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+        "500": {$ref: "#/components/responses/Error"}
   /projects/{id}/assets/{assetId}/image:
     put:
       tags: [projects, assets]
@@ -2559,6 +2584,79 @@ components:
       in: cookie
       name: open_ai_canvas_session
   schemas:
+    TimelineRenderOutput:
+      type: object
+      required: [width, height, fit, burnSubtitles]
+      properties:
+        width: {type: integer, minimum: 16, maximum: 1920, multipleOf: 2}
+        height: {type: integer, minimum: 16, maximum: 1920, multipleOf: 2}
+        fit: {type: string, enum: [auto, pad, crop]}
+        burnSubtitles: {type: boolean}
+    TimelineRenderOverlay:
+      type: object
+      required: [x, y, width, height]
+      description: 归一化输出坐标，x+width和y+height不超过1；仅image/text可用。Logo保持宽高比contain；固定中文字体。
+      properties:
+        x: {type: number, minimum: 0, maximum: 1}
+        y: {type: number, minimum: 0, maximum: 1}
+        width: {type: number, minimum: 0, exclusiveMinimum: true, maximum: 1}
+        height: {type: number, minimum: 0, exclusiveMinimum: true, maximum: 1}
+        opacity: {type: number, minimum: 0, maximum: 1, default: 1}
+        fontSize: {type: number, minimum: 0.01, maximum: 0.1, default: 0.03}
+        color: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        background: {type: string, pattern: '^#[0-9a-fA-F]{6}$'}
+        align: {type: string, enum: [left, center, right], default: center}
+    TimelineRenderProject:
+      type: object
+      required: [version, durationMs, tracks, clips]
+      properties:
+        version: {type: integer, enum: [2]}
+        durationMs: {type: integer, description: 增强模式为1–60000毫秒}
+        output: {$ref: "#/components/schemas/TimelineRenderOutput"}
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [id, kind]
+            properties:
+              id: {type: string}
+              kind: {type: string, enum: [video, audio, image, text, subtitle]}
+              order: {type: integer}
+              visible: {type: boolean, default: true}
+              muted: {type: boolean, default: false}
+        clips:
+          type: array
+          items:
+            type: object
+            required: [id, kind, trackId, startMs, durationMs]
+            properties:
+              id: {type: string}
+              kind: {type: string, enum: [video, audio, image, text, subtitle]}
+              trackId: {type: string}
+              startMs: {type: integer, minimum: 0}
+              durationMs: {type: integer, minimum: 1}
+              sourceStartMs: {type: integer, minimum: 0}
+              sourceDurationMs: {type: integer}
+              text: {type: string, description: 增强模式最多200 Unicode字符和两行}
+              overlay: {$ref: "#/components/schemas/TimelineRenderOverlay"}
+              directMedia:
+                type: object
+                required: [storageKey]
+                properties:
+                  id: {type: string}
+                  kind: {type: string}
+                  storageKey: {type: string, description: 'resource:<当前用户就绪资源ID>，禁止URL和本机路径'}
+    TimelineRenderResult:
+      type: object
+      properties:
+        resourceId: {type: string}
+        fileName: {type: string}
+        width: {type: integer}
+        height: {type: integer}
+        fit: {type: string}
+        durationMs: {type: integer}
+        subtitlesBurned: {type: boolean, description: 存在可见非空字幕且实际烧录成功}
+        overlayCount: {type: integer, description: 可见文字及Logo层数量，不含字幕}
     FeedbackAttachment:
       type: object
       required: [id, name, type, url, size, mimeType]

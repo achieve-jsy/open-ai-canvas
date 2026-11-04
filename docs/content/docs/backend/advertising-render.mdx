@@ -1,0 +1,44 @@
+---
+title: 广告时间线合成基础
+description: 中文文字、Logo与硬字幕的服务端合成合同和验收边界
+---
+
+# 广告时间线合成基础
+
+本阶段是在影策既有时间线、任务队列、资源存储和 FFmpeg 渲染器上增加合成能力，不是完整的广告生成产品。商品Brief、脚本审批、镜头生成编排、候选采用、收费幂等和批次恢复均不在本阶段；不能把上游已有能力或未来计划算成本次新增。
+
+## 使用与边界
+
+画布时间线可选择广告竖屏、添加卖点文字，或上传 PNG/JPEG/WebP 图片作为 Logo。选中片段后调整文字、归一化位置、尺寸、字号、颜色、对齐、透明度与时间。保存保留 output/overlay；默认导出提交服务端任务。编辑器插件的导出和预览模块复用同一套控件，但当前源码未找到 EditorStoreProvider 的宿主调用，不能宣称独立编辑器路由已可用。
+
+任务创建后显示任务ID和任务中心链接。页面等待失败或关闭不等于服务端取消；先在任务中心查询原任务，勿重复提交。没有新增跨业务广告幂等机制。普通时间线保留浏览器导出；含 output、文字或 overlay 的时间线在加载 wasm 前明确拒绝本地导出，不会静默丢元素。渲染不调用收费模型。
+
+## 渲染合同
+
+- POST /api/timeline/renders：timeline 为独立资源快照，projectId 可选；业务项目ID不能用画布ID代替。
+- version=2；output 包括 width、height（16–1920偶数）、fit（auto/pad/crop）、burnSubtitles。无 output 的增强项目沿用1920×1080默认画幅。
+- 增强模式最长60秒、最多32个可见片段、16个文字或Logo层；主画面视频/顺序图片不允许重叠，至少一个主画面。末尾文字比主画面长时补黑场至时间线结尾。
+- overlay 使用0–1坐标且不得超框；字号为输出高度的0.01–0.1，默认0.03；颜色为六位十六进制。不提供自定义字体、滤镜或文件路径。
+- 文字最多200个Unicode字符、两行。未设置overlay的文字默认框为x=0.1、y=0.1、width=0.8、height=0.2。Logo默认0.8、0.05、0.15、0.1，保持原始比例contain。
+- 层序为主画面 → Logo → 文字 → 字幕；同类按轨道order及片段id排序。区间为开始包含、结束不包含；ASS百分之一秒及30fps带来帧级时间误差。
+- 隐藏轨道不渲染，静音沿用现有音轨逻辑。字幕只有burnSubtitles=true时烧录，同时仍可产出SRT。
+- 创建和执行均检查媒体属于当前用户、状态就绪及MIME匹配。缺源、非法坐标、缺字体/滤镜等必须失败，不能返回漏元素的成功成片。
+- 成功任务resultJson包含resourceId、width/height/fit、subtitlesBurned、overlayCount；要求烧录且存在可见非空字幕时，前端要求subtitlesBurned=true。
+
+## 部署
+
+后端运行环境需要 ffmpeg（ass、overlay、colorchannelmixer滤镜）、ffprobe、fontconfig 和 Noto Sans CJK SC。现有后端Dockerfile增加font-noto-cjk；只修改配置不等于镜像已验证。可在获准构建后的目标容器检查：
+
+```sh
+ffmpeg -filters
+ffprobe -version
+fc-match 'Noto Sans CJK SC'
+```
+
+字体及文字通过固定ASS文件送入FFmpeg，不解释用户文字中的ASS样式、命令或路径。预览使用浏览器字体/CSS，是近似排版，最终以服务端MP4为准；过宽文本应缩字号或手动换行。
+
+## 当前证据与待验收
+
+已运行Go参数/归属/Logo/ASS/取消与缺工具检查，以及真实3秒320×568媒体冒烟：音轨、透明Logo、中文、ASS形状的字面文本、字幕、时序采样、资源产物与AIGC来源标识。已人工查看抽帧。前端专项测试、真实组件DOM输入检查、类型检查、lint和生产构建通过。
+
+尚未启动真实产品服务器、完成明暗/窄屏浏览器验收，也未构建运行目标Docker镜像。DOM测试不替代浏览器页面验收，宿主机FFmpeg不替代目标镜像。人工验收项目见待测试页；PostgreSQL/Redis及付费模型路径未覆盖。
