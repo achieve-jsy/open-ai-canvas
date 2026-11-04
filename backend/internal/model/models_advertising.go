@@ -25,7 +25,7 @@ type AdvertisingRevision struct {
 // Explicit references protect both drafts and immutable snapshots from resource deletion.
 type AdvertisingResourceReference struct {
 	ProjectID  string              `json:"projectId" gorm:"primaryKey;size:36"`
-	ScopeKey   string              `json:"scopeKey" gorm:"primaryKey;size:36"`
+	ScopeKey   string              `json:"scopeKey" gorm:"primaryKey;size:64"`
 	ResourceID string              `json:"resourceId" gorm:"primaryKey;size:36;index:idx_advertising_resource"`
 	Project    *AdvertisingProject `json:"-" gorm:"belongsTo:Project;foreignKey:ProjectID;references:ProjectID;constraint:OnDelete:RESTRICT"`
 	Resource   *Resource           `json:"-" gorm:"foreignKey:ResourceID;references:ID;constraint:OnDelete:RESTRICT"`

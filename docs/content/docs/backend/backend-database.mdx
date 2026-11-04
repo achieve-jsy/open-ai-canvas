@@ -5,6 +5,12 @@ description: 影策后端核心持久化表与状态边界
 
 # 后端数据库
 
+## 广告制作状态（Schema 80）
+
+版本80追加四表：`advertising_productions`保存确认版本对应的制作设置与独立CAS revision；`advertising_submissions`保存报价、批准及唯一Task关联；`advertising_assemblies`保存不可变时间线与可空画布关联；`advertising_render_attempts`保存每次导出的操作键与唯一Task关联。提交、组装、渲染分别按父ID与client_operation_id唯一，重放记录不被后续尝试覆盖。Task外键RESTRICT，画布删除只将assembly.canvas_id置空。
+
+`advertising_resource_references.scope_key`由36扩为64字符，保留已有draft/确认引用，容纳production/candidate/assembly范围。SQLite→PostgreSQL搬迁在Project、确认版本、Canvas与Task之后复制四表。当前先提供制作状态持久化与CAS，生成、候选采用、渲染和HTTP页面仍在C后续任务，不能视作已可生成广告。迁移回归使用临时数据库，不修改业务数据；PG测试需要显式DSN。
+
 ## 广告项目快照（Schema 79）
 
 版本79 `advertising_projects` 沿用migrate-schema追加迁移，不修改已发布校验和。新增三表并同步SQLite→PostgreSQL搬迁清单：

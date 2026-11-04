@@ -153,4 +153,9 @@ func TestAdvertisingPostgresMigration(t *testing.T) {
 	scopedSQL, _ := db.DB()
 	defer scopedSQL.Close()
 	checkAdvertisingMigration(t, db)
+	checkAdvertisingGenerationTables(t, db)
+	var width int
+	if err := db.Raw("SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?", "advertising_resource_references", "scope_key").Scan(&width).Error; err != nil || width != 64 {
+		t.Fatalf("scope key width=%d err=%v", width, err)
+	}
 }

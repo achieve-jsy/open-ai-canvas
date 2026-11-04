@@ -76,6 +76,47 @@ func TestAdvertisingSnapshotMigration(t *testing.T) {
 	}
 }
 
+func TestAdvertisingGenerationCopy(t *testing.T) {
+	open := func() *gorm.DB {
+		db, err := database.Open(database.Config{Driver: "sqlite", DataDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB, _ := db.DB()
+		t.Cleanup(func() { _ = sqlDB.Close() })
+		if err := database.MigrateSchema(db); err != nil {
+			t.Fatal(err)
+		}
+		return db
+	}
+	source, target := open(), open()
+	rows := []any{&model.Project{ID: "project", UserID: "owner", Name: "Ad"}, &model.AdvertisingProject{ProjectID: "project", Revision: 2, DraftJSON: "{}"}, &model.AdvertisingRevision{ID: "confirmed", ProjectID: "project", SourceRevision: 1, SnapshotJSON: "{}"}, &model.Task{ID: "task", UserID: "owner"}, &model.Task{ID: "render", UserID: "owner"}, &model.AdvertisingProduction{ID: "production", ProjectID: "project", ConfirmedRevisionID: "confirmed", Revision: 1, SettingsJSON: "{}"}}
+	taskID := "task"
+	rows = append(rows, &model.AdvertisingSubmission{ID: "submission", ProductionID: "production", ShotID: "shot", Kind: "video", ClientOperationID: "operation", TaskID: &taskID, RequestJSON: "{}", QuoteJSON: "{}"}, &model.AdvertisingAssembly{ID: "assembly", ProductionID: "production", ClientOperationID: "operation", SourceProductionRevision: 1, TimelineJSON: "{\"version\":2}"}, &model.AdvertisingRenderAttempt{ID: "attempt", AssemblyID: "assembly", ClientOperationID: "operation", TaskID: "render"})
+	for _, row := range rows {
+		if err := source.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	wanted := map[string]bool{"projects": true, "advertising_projects": true, "advertising_revisions": true, "tasks": true, "advertising_productions": true, "advertising_submissions": true, "advertising_assemblies": true, "advertising_render_attempts": true}
+	for _, m := range migrations() {
+		if !wanted[m.name] {
+			continue
+		}
+		n, err := m.run(source, target, true)
+		if err != nil || n < 1 {
+			t.Fatalf("copy %s: %d %v", m.name, n, err)
+		}
+	}
+	var got model.AdvertisingAssembly
+	if err := target.First(&got, "id = ?", "assembly").Error; err != nil || got.TimelineJSON != "{\"version\":2}" {
+		t.Fatalf("copied snapshot %+v %v", got, err)
+	}
+	if err := target.Delete(&model.Task{}, "id = ?", "task").Error; err == nil {
+		t.Fatal("copied submission failed to protect task")
+	}
+}
+
 func TestCanvasHistoryCompositeKeyMigration(t *testing.T) {
 	source, err := database.Open(database.Config{Driver: "sqlite", DSN: "file:history-migration-source?mode=memory&cache=shared"})
 	if err != nil {
