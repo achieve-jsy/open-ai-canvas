@@ -41,7 +41,7 @@ func renderTestProject(storageKey string) renderProject {
 
 func renderInputJSON(t *testing.T, project renderProject) string {
 	t.Helper()
-	raw, err := json.Marshal(timelineRenderInput{ProjectID: "prj-render", Timeline: project})
+	raw, err := json.Marshal(timelineRenderInput{Timeline: project})
 	if err != nil {
 		t.Fatalf("marshal render input: %v", err)
 	}
@@ -66,6 +66,10 @@ func seedRunningRenderTask(t *testing.T, db *gorm.DB, inputJSON string) *model.T
 
 func TestCreateTimelineRenderTaskQueues(t *testing.T) {
 	svc, db := newTimelineTaskTestService(t)
+	seedResource(t, db, "res-1", "usr-render-test", "video/mp4")
+	if err := db.Create(&model.Project{ID: "prj-render", UserID: "usr-render-test", Name: "render"}).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	task, err := svc.CreateTimelineRenderTask("usr-render-test", TimelineRenderCreateRequest{
 		ProjectID: "prj-render",

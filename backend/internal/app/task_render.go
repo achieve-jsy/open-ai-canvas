@@ -29,6 +29,12 @@ func (w *taskWorkerCoordinator) processTimelineRender(task *model.Task, ctx cont
 	if err := json.Unmarshal([]byte(task.InputJSON), &input); err != nil {
 		return w.failTimelineTask(task, "渲染失败", "任务缺少有效的时间线快照")
 	}
+	if err := validateEnhancedRenderProject(input.Timeline); err != nil {
+		return w.failTimelineTask(task, "渲染失败", err.Error())
+	}
+	if err := s.validateTimelineRenderAccess(task.UserID, input.ProjectID, input.Timeline); err != nil {
+		return w.failTimelineTask(task, "渲染失败", err.Error())
+	}
 	plan := buildRenderPlan(input.Timeline)
 	if !plan.HasMedia {
 		return w.failTimelineTask(task, "渲染失败", "时间线没有可渲染的媒体片段")
