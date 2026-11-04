@@ -87,7 +87,7 @@ func (s *Service) GetAdvertisingProduction(userID, projectID, id string) (Advert
 	result, err := advertisingProductionDetail(s.repo, userID, projectID, id)
 	return result, advertisingProductionFailure(err)
 }
-func validateAdvertisingProductionSettings(repo *repository.Repository, userID string, snapshot AdvertisingSnapshot, settings *AdvertisingProductionSettings) error {
+func (s *Service) validateAdvertisingProductionSettings(repo *repository.Repository, userID, productionID string, snapshot AdvertisingSnapshot, settings *AdvertisingProductionSettings) error {
 	for name, value := range map[string]string{"ttsModelId": settings.TTSModelID, "voiceId": settings.VoiceID} {
 		if err := advertisingText(name, value, 120, false); err != nil {
 			return BadAuthRequest(err.Error())
@@ -105,12 +105,26 @@ func validateAdvertisingProductionSettings(repo *repository.Repository, userID s
 		settings.Selections = map[string]AdvertisingSelection{}
 	}
 	for id, selection := range settings.Selections {
-		if !slices.ContainsFunc(snapshot.Draft.Shots, func(shot AdvertisingShot) bool { return shot.ID == id }) || selection.VideoStartMs < 0 {
+		index := slices.IndexFunc(snapshot.Draft.Shots, func(shot AdvertisingShot) bool { return shot.ID == id })
+		if index < 0 || selection.VideoStartMs < 0 {
 			return BadAuthRequest("镜头或裁剪起点不合法")
 		}
-		// No candidate can be adopted until its task has completed and registered a resource.
-		if selection.VideoSubmissionID != "" || selection.AudioSubmissionID != "" {
-			return advertisingError(409, kernel.ErrorReason("advertising_candidate_unavailable"), "候选尚未就绪")
+		shot := snapshot.Draft.Shots[index]
+		if selection.VideoSubmissionID != "" {
+			resource, err := s.getAdvertisingCandidateResource(repo, userID, productionID, id, "video", selection.VideoSubmissionID)
+			if err != nil {
+				return err
+			}
+			if resource.DurationMs < selection.VideoStartMs || resource.DurationMs-selection.VideoStartMs < shot.DurationMs {
+				return advertisingCandidateUnavailable()
+			}
+		} else if selection.VideoStartMs != 0 {
+			return BadAuthRequest("未选择视频时不能设置裁剪起点")
+		}
+		if selection.AudioSubmissionID != "" {
+			if _, err := s.getAdvertisingCandidateResource(repo, userID, productionID, id, "audio", selection.AudioSubmissionID); err != nil {
+				return err
+			}
 		}
 	}
 	if settings.MusicResourceID != "" {
@@ -140,7 +154,7 @@ func (s *Service) SaveAdvertisingProductionSettings(userID, projectID, id string
 		if current.Production.Revision != expectedRevision {
 			return repository.ErrAdvertisingProductionConflict
 		}
-		if err := validateAdvertisingProductionSettings(repo, userID, current.ConfirmedSnapshot.Snapshot, &settings); err != nil {
+		if err := s.validateAdvertisingProductionSettings(repo, userID, id, current.ConfirmedSnapshot.Snapshot, &settings); err != nil {
 			return err
 		}
 		data, err := json.Marshal(settings)

@@ -81,7 +81,17 @@ func (r *Repository) GuardAdvertisingDeletion(userID, id string) (err error) {
 }
 
 func (r *Repository) DeleteAdvertisingContent(id string) error {
-	for _, row := range []any{&model.AdvertisingResourceReference{}, &model.AdvertisingRevision{}, &model.AdvertisingProject{}} {
+	productions := r.db.Model(&model.AdvertisingProduction{}).Select("id").Where("project_id = ?", id)
+	assemblies := r.db.Model(&model.AdvertisingAssembly{}).Select("id").Where("production_id IN (?)", productions)
+	if err := r.db.Where("assembly_id IN (?)", assemblies).Delete(&model.AdvertisingRenderAttempt{}).Error; err != nil {
+		return err
+	}
+	for _, row := range []any{&model.AdvertisingAssembly{}, &model.AdvertisingSubmission{}} {
+		if err := r.db.Where("production_id IN (?)", productions).Delete(row).Error; err != nil {
+			return err
+		}
+	}
+	for _, row := range []any{&model.AdvertisingResourceReference{}, &model.AdvertisingProduction{}, &model.AdvertisingRevision{}, &model.AdvertisingProject{}} {
 		if err := r.db.Where("project_id = ?", id).Delete(row).Error; err != nil {
 			return err
 		}
@@ -100,8 +110,15 @@ func (r *Repository) AdvertisingResourceReferences(userID string, ids []string) 
 		}
 		for _, row := range rows {
 			label := row.Name + "（确认版本）"
-			if row.ScopeKey == "draft" {
+			switch {
+			case row.ScopeKey == "draft":
 				label = row.Name + "（草稿）"
+			case strings.HasPrefix(row.ScopeKey, "candidate:"):
+				label = row.Name + "（生成候选）"
+			case strings.HasPrefix(row.ScopeKey, "production:"):
+				label = row.Name + "（制作设置）"
+			case strings.HasPrefix(row.ScopeKey, "assembly:"):
+				label = row.Name + "（组装版本）"
 			}
 			result = append(result, ResourceDirectReference{Kind: AdvertisingResourceReferenceKind, ID: row.ProjectID + "/" + row.ScopeKey, Title: label, ResourceID: row.ResourceID})
 		}

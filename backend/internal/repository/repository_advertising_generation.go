@@ -14,6 +14,16 @@ func (r *Repository) IsAdvertisingGenerationTask(taskID string) (bool, error) {
 	return n > 0, err
 }
 
+func (r *Repository) AdvertisingSubmissionForTask(taskID string) (*model.AdvertisingSubmission, error) {
+	var row model.AdvertisingSubmission
+	err := r.db.Where("task_id = ?", taskID).First(&row).Error
+	return &row, err
+}
+func (r *Repository) HasAdvertisingCandidateReference(projectID, submissionID, resourceID string) (bool, error) {
+	var count int64
+	err := r.db.Model(&model.AdvertisingResourceReference{}).Where("project_id = ? AND scope_key = ? AND resource_id = ?", projectID, "candidate:"+submissionID, resourceID).Count(&count).Error
+	return count == 1, err
+}
 func (r *Repository) AdvertisingSubmission(productionID, id string) (*model.AdvertisingSubmission, error) {
 	var row model.AdvertisingSubmission
 	err := r.db.Where("production_id = ? AND id = ?", productionID, id).First(&row).Error

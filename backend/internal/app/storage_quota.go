@@ -140,7 +140,7 @@ func (s *Service) saveTaskCompletionWithinStorageQuota(task *model.Task, resultJ
 	completed.CompletedAt = ptr(time.Now())
 	var register func(*repository.Repository) error
 	visualImage := strings.Contains(task.InputJSON, "project_asset_image")
-	if task.MediaRecoveryJSON != "" || visualImage {
+	if task.MediaRecoveryJSON != "" || visualImage || (strings.HasPrefix(task.ProjectID, "ad_") && (task.Type == "canvas_video" || task.Type == "canvas_audio")) {
 		completed.MediaStage = "completed"
 		register = func(repo *repository.Repository) error {
 			writer := &Service{repo: repo, dataDir: s.dataDir}
@@ -161,13 +161,15 @@ func (s *Service) saveTaskCompletionWithinStorageQuota(task *model.Task, resultJ
 				}
 				completed.ResultJSON = string(encoded)
 			}
-			if task.MediaRecoveryJSON == "" {
-				return nil
+			if task.MediaRecoveryJSON != "" {
+				if err := writer.RegisterTaskOutputFromTask(completed); err != nil {
+					return err
+				}
+				if err := writer.registerRecoveredMediaAssets(completed); err != nil {
+					return err
+				}
 			}
-			if err := writer.RegisterTaskOutputFromTask(completed); err != nil {
-				return err
-			}
-			return writer.registerRecoveredMediaAssets(completed)
+			return writer.registerAdvertisingTaskOutput(repo, completed)
 		}
 	}
 	if err := s.repo.SaveTaskCompletionWithRegistration(&completed, expectedStatus, results, register); err != nil {
