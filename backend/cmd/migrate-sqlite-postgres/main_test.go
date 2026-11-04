@@ -37,6 +37,45 @@ func TestMigrationListCoversSchemaModels(t *testing.T) {
 	}
 }
 
+func TestAdvertisingSnapshotMigration(t *testing.T) {
+	open := func() *gorm.DB {
+		db, err := database.Open(database.Config{Driver: "sqlite", DataDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB, _ := db.DB()
+		t.Cleanup(func() { _ = sqlDB.Close() })
+		if err := db.AutoMigrate(&model.Project{}, &model.Resource{}, &model.AdvertisingProject{}, &model.AdvertisingRevision{}, &model.AdvertisingResourceReference{}); err != nil {
+			t.Fatal(err)
+		}
+		return db
+	}
+	source, target := open(), open()
+	revID := "snapshot"
+	for _, row := range []any{&model.Project{ID: "project", UserID: "owner", Name: "Ad"}, &model.Resource{ID: "resource", UserID: "owner"}, &model.AdvertisingProject{ProjectID: "project", Revision: 2, DraftJSON: "{}", LatestConfirmedRevisionID: &revID}, &model.AdvertisingRevision{ID: revID, ProjectID: "project", SourceRevision: 1, SnapshotJSON: "{\"name\":\"原商品\"}"}, &model.AdvertisingResourceReference{ProjectID: "project", ScopeKey: revID, ResourceID: "resource"}} {
+		if err := source.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	wanted := map[string]bool{"projects": true, "resources": true, "advertising_projects": true, "advertising_revisions": true, "advertising_resource_references": true}
+	for _, m := range migrations() {
+		if !wanted[m.name] {
+			continue
+		}
+		count, err := m.run(source, target, true)
+		if err != nil || count != 1 {
+			t.Fatalf("copy %s count=%d err=%v", m.name, count, err)
+		}
+	}
+	var got model.AdvertisingRevision
+	if err := target.First(&got, "id = ?", revID).Error; err != nil || got.SnapshotJSON != "{\"name\":\"原商品\"}" {
+		t.Fatalf("snapshot changed: %+v %v", got, err)
+	}
+	if err := target.Delete(&model.Resource{}, "id = ?", "resource").Error; err == nil {
+		t.Fatal("copied reference did not protect resource")
+	}
+}
+
 func TestCanvasHistoryCompositeKeyMigration(t *testing.T) {
 	source, err := database.Open(database.Config{Driver: "sqlite", DSN: "file:history-migration-source?mode=memory&cache=shared"})
 	if err != nil {
