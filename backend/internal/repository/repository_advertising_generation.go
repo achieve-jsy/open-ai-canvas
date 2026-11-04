@@ -91,3 +91,27 @@ func (r *Repository) CASAdvertisingProduction(id string, expected int64, setting
 	}
 	return nil
 }
+
+func (r *Repository) AdvertisingAssembly(productionID, id string) (*model.AdvertisingAssembly, error) {
+	var row model.AdvertisingAssembly
+	err := r.db.Where("production_id = ? AND id = ?", productionID, id).First(&row).Error
+	return &row, err
+}
+func (r *Repository) AdvertisingAssemblyForOperation(productionID, key string) (*model.AdvertisingAssembly, error) {
+	var row model.AdvertisingAssembly
+	err := r.db.Where("production_id = ? AND client_operation_id = ?", productionID, key).First(&row).Error
+	return &row, err
+}
+func (r *Repository) CreateAdvertisingAssembly(row *model.AdvertisingAssembly) error {
+	return r.db.Omit(clause.Associations).Create(row).Error
+}
+func (r *Repository) AdvertisingAssemblies(productionID string, page, size int) ([]model.AdvertisingAssembly, int64, error) {
+	rows := []model.AdvertisingAssembly{}
+	var total int64
+	q := r.db.Model(&model.AdvertisingAssembly{}).Where("production_id = ?", productionID)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.Order("created_at DESC, id DESC").Limit(size).Offset((page - 1) * size).Find(&rows).Error
+	return rows, total, err
+}

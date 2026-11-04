@@ -9,7 +9,7 @@ description: 影策后端核心持久化表与状态边界
 
 版本80追加四表：`advertising_productions`保存确认版本对应的制作设置与独立CAS revision；`advertising_submissions`保存报价、批准及唯一Task关联；`advertising_assemblies`保存不可变时间线与可空画布关联；`advertising_render_attempts`保存每次导出的操作键与唯一Task关联。提交、组装、渲染分别按父ID与client_operation_id唯一，重放记录不被后续尝试覆盖。Task外键RESTRICT，画布删除只将assembly.canvas_id置空。
 
-`advertising_resource_references.scope_key`由36扩为64字符，保留已有draft/确认引用，容纳production/candidate/assembly范围。SQLite→PostgreSQL搬迁在Project、确认版本、Canvas与Task之后复制四表。制作状态、视频/TTS报价批准与候选采用已提供服务层：任务成功与candidate引用同事务登记，保留未采用的候选；采用校验归属、任务终态、媒体类型、已测时长和文件可读性。未知时长的已保存候选保留供诊断，不可采用或组装。广告删除依次清理render attempt、assembly、submission、production与B内容，保留媒体、任务、账务并解绑画布。组装、渲染和HTTP页面仍在C后续任务，不能视作已可交付广告。迁移回归使用临时数据库，不修改业务数据；PG测试需要显式DSN。
+`advertising_resource_references.scope_key`由36扩为64字符，保留已有draft/确认引用，容纳production/candidate/assembly范围。SQLite→PostgreSQL搬迁在Project、确认版本、Canvas与Task之后复制四表。制作状态、视频/TTS报价批准与候选采用已提供服务层：任务成功与candidate引用同事务登记，保留未采用的候选；采用校验归属、任务终态、媒体类型、已测时长和文件可读性。未知时长的已保存候选保留供诊断，不可采用或组装。广告删除依次清理render attempt、assembly、submission、production与B内容，保留媒体、任务、账务并解绑画布。组装服务会在事务外用ffprobe复核真实音视频流、尺寸与时长，事务内复核制作revision和资源身份，再原子保存不可变TimelineProject v2、素材关联与独立画布。同操作键返回原组装，不覆盖手改画布；未知时长、旁白超长或视频裁剪后不足均拒绝。渲染及HTTP页面仍在C后续任务，不能视作已可交付广告。迁移回归使用临时数据库，不修改业务数据；PG测试需要显式DSN。
 
 ## 广告项目快照（Schema 79）
 

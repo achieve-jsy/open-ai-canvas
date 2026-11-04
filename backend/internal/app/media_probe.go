@@ -42,6 +42,7 @@ type mediaProbeInfo struct {
 	Width      int
 	Height     int
 	DurationMs int64
+	HasAudio   bool
 	Tags       map[string]string
 }
 
@@ -65,8 +66,8 @@ func probeMediaFile(ctx context.Context, path string) (mediaProbeInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, mediaProbeTimeout)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, bin,
-		"-v", "error", "-select_streams", "v:0",
-		"-show_entries", "stream=width,height:stream_side_data=rotation:format=duration:format_tags",
+		"-v", "error",
+		"-show_entries", "stream=codec_type,width,height:stream_side_data=rotation:format=duration:format_tags",
 		"-of", "json", path).Output()
 	if err != nil {
 		return mediaProbeInfo{}, fmt.Errorf("媒体探测失败：%w", err)
@@ -79,8 +80,9 @@ func probeMediaFile(ctx context.Context, path string) (mediaProbeInfo, error) {
 func parseMediaProbeOutput(raw []byte) (mediaProbeInfo, error) {
 	var document struct {
 		Streams []struct {
-			Width        int `json:"width"`
-			Height       int `json:"height"`
+			CodecType    string `json:"codec_type"`
+			Width        int    `json:"width"`
+			Height       int    `json:"height"`
 			SideDataList []struct {
 				Rotation *float64 `json:"rotation"`
 			} `json:"side_data_list"`
@@ -94,8 +96,13 @@ func parseMediaProbeOutput(raw []byte) (mediaProbeInfo, error) {
 		return mediaProbeInfo{}, fmt.Errorf("媒体探测结果无效：%w", err)
 	}
 	info := mediaProbeInfo{Tags: document.Format.Tags}
-	if len(document.Streams) > 0 {
-		stream := document.Streams[0]
+	for _, stream := range document.Streams {
+		if stream.CodecType == "audio" {
+			info.HasAudio = true
+		}
+		if info.Width > 0 || (stream.CodecType != "" && stream.CodecType != "video") {
+			continue
+		}
 		if stream.Width > 0 && stream.Height > 0 && stream.Width <= mediaProbeMaxDimension && stream.Height <= mediaProbeMaxDimension {
 			info.Width, info.Height = stream.Width, stream.Height
 			for _, side := range stream.SideDataList {
