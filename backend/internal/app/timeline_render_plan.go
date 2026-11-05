@@ -357,8 +357,8 @@ func buildRenderFFmpegArgs(plan renderPlan, target string) []string {
 				overlayBase+i, renderSampleRate, volume, delay, delay, label))
 			fmt.Fprintf(&mixInputs, "[%s]", label)
 		}
-		// amix 会按输入数衰减音量，混音后乘回，保证配音响度不随片段数量变化。
-		filters = append(filters, fmt.Sprintf("%samix=inputs=%d:duration=first:dropout_transition=0,volume=%d[aout]", mixInputs.String(), len(overlays)+1, len(overlays)+1))
+		// Preserve per-clip gains when earlier narration/music inputs end.
+		filters = append(filters, fmt.Sprintf("%samix=inputs=%d:duration=first:normalize=0[aout]", mixInputs.String(), len(overlays)+1))
 	}
 
 	videoOut := "vout"

@@ -204,6 +204,12 @@ func TestAdvertisingRenderOutput(t *testing.T) {
 	settings.Selections[draft.Shots[0].ID] = selection
 	settings.MusicResourceID = music.ID
 	media["voice"] = AdvertisingProbedMedia{Resource: voice, DurationMs: 2000}
+	last := draft.Shots[2].ID
+	draft.Shots[2].Voiceover = "相同旁白音量"
+	selection = settings.Selections[last]
+	selection.AudioSubmissionID = "voice-later"
+	settings.Selections[last] = selection
+	media["voice-later"] = media["voice"]
 	media[music.ID] = AdvertisingProbedMedia{Resource: music, DurationMs: 3000}
 	media[logo.ID] = AdvertisingProbedMedia{Resource: logo, Width: 60, Height: 30}
 	ad, err := s.CreateAdvertisingProject("owner", AdvertisingCreateRequest{Name: "Synthetic render fixture", Draft: &draft})
@@ -266,7 +272,7 @@ func TestAdvertisingRenderOutput(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Task.ResultJSON), &output); err != nil {
 		t.Fatal(err)
 	}
-	if len(output.Sources) != 6 || output.OverlayCount != 4 {
+	if len(output.Sources) != 7 || output.OverlayCount != 4 {
 		t.Fatalf("provenance: %+v", output)
 	}
 	frames := map[string]bool{}
@@ -287,10 +293,11 @@ func TestAdvertisingRenderOutput(t *testing.T) {
 	if len(frames) != 3 {
 		t.Fatal("shots do not change")
 	}
+	levels := map[string]float64{}
 	for _, interval := range []struct {
 		at      string
 		audible bool
-	}{{"0.5", true}, {"2.3", true}, {"7", false}} {
+	}{{"0.5", true}, {"2.3", true}, {"7", false}, {"10.5", true}} {
 		pcm, err := exec.Command("ffmpeg", "-v", "error", "-ss", interval.at, "-i", path, "-t", "0.4", "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1").Output()
 		if err != nil || len(pcm) == 0 {
 			t.Fatalf("audio decode: %v", err)
@@ -301,9 +308,13 @@ func TestAdvertisingRenderOutput(t *testing.T) {
 			energy += v * v
 		}
 		rms := math.Sqrt(energy / float64(len(pcm)/2))
+		levels[interval.at] = rms
 		if interval.audible && rms < 20 || !interval.audible && rms > 2 {
 			t.Fatalf("audio at %s: rms=%f", interval.at, rms)
 		}
+	}
+	if ratio := levels["10.5"] / levels["0.5"]; ratio < 0.9 || ratio > 1.1 {
+		t.Fatalf("later narration gain changed: ratio=%f levels=%v", ratio, levels)
 	}
 	refs, err := s.repo.AdvertisingResourceReferences("owner", []string{resource.ID})
 	if err != nil || len(refs) != 1 {

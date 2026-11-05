@@ -39,11 +39,12 @@ var errMediaProbeUnavailable = errors.New("媒体探测依赖未安装（需要 
 // mediaProbeInfo 是 ffprobe 对一个本地媒体文件的探测结果。没有视频流（纯音频）时宽高为 0；
 // Tags 是容器级（format）标签，键保持 ffprobe 输出的原样大小写。
 type mediaProbeInfo struct {
-	Width      int
-	Height     int
-	DurationMs int64
-	HasAudio   bool
-	Tags       map[string]string
+	Width           int
+	Height          int
+	DurationMs      int64
+	VideoDurationMs int64
+	HasAudio        bool
+	Tags            map[string]string
 }
 
 func mediaProbeAvailable() bool {
@@ -67,7 +68,7 @@ func probeMediaFile(ctx context.Context, path string) (mediaProbeInfo, error) {
 	defer cancel()
 	output, err := exec.CommandContext(ctx, bin,
 		"-v", "error",
-		"-show_entries", "stream=codec_type,width,height:stream_side_data=rotation:format=duration:format_tags",
+		"-show_entries", "stream=codec_type,width,height,duration:stream_side_data=rotation:format=duration:format_tags",
 		"-of", "json", path).Output()
 	if err != nil {
 		return mediaProbeInfo{}, fmt.Errorf("媒体探测失败：%w", err)
@@ -81,6 +82,7 @@ func parseMediaProbeOutput(raw []byte) (mediaProbeInfo, error) {
 	var document struct {
 		Streams []struct {
 			CodecType    string `json:"codec_type"`
+			Duration     string `json:"duration"`
 			Width        int    `json:"width"`
 			Height       int    `json:"height"`
 			SideDataList []struct {
@@ -105,6 +107,9 @@ func parseMediaProbeOutput(raw []byte) (mediaProbeInfo, error) {
 		}
 		if stream.Width > 0 && stream.Height > 0 && stream.Width <= mediaProbeMaxDimension && stream.Height <= mediaProbeMaxDimension {
 			info.Width, info.Height = stream.Width, stream.Height
+			if seconds, err := strconv.ParseFloat(stream.Duration, 64); err == nil && seconds > 0 && seconds < float64(math.MaxInt64)/1000 {
+				info.VideoDurationMs = int64(math.Floor(seconds * 1000))
+			}
 			for _, side := range stream.SideDataList {
 				if side.Rotation != nil && int(math.Abs(math.Round(*side.Rotation)))%180 == 90 {
 					info.Width, info.Height = info.Height, info.Width

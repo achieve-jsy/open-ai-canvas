@@ -172,4 +172,34 @@ func TestAdvertisingSubmissionLifecycle(t *testing.T) {
 	if _, err := svc.CreateTask("user", CreateTaskRequest{ProjectID: ad.Project.ID, Type: "canvas_video", Prompt: "bypass", Input: map[string]any{"mode": "video"}}); err == nil {
 		t.Fatal("direct create bypassed approval")
 	}
+	// A refunded queued task must remain approval-bound after its project is deleted.
+	req.ClientOperationID = "10000000-0000-4000-8000-000000000099"
+	quote, err := svc.PrepareAdvertisingSubmission("user", ad.Project.ID, id, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := svc.ExecuteAdvertisingSubmission("user", ad.Project.ID, id, quote.ID, quote.Quote.QuoteHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CancelTask(context.Background(), "user", approved.Task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteAdvertisingProject("user", ad.Project.ID, confirmed.CurrentRevision); err != nil {
+		t.Fatal(err)
+	}
+	var ordersBefore, ordersAfter int64
+	if err := db.Model(&model.BillingOrder{}).Count(&ordersBefore).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RetryTask("user", approved.Task.ID); err == nil {
+		t.Fatal("deleted ad task bypassed fresh quote approval")
+	}
+	if err := db.Model(&model.BillingOrder{}).Count(&ordersAfter).Error; err != nil {
+		t.Fatal(err)
+	}
+	retained, err := svc.repo.TaskForUser("user", approved.Task.ID)
+	if err != nil || retained.Status != model.TaskStatusCancelled || ordersAfter != ordersBefore {
+		t.Fatalf("retry changed cancelled task or billing: %+v orders %d->%d err=%v", retained, ordersBefore, ordersAfter, err)
+	}
 }

@@ -362,6 +362,8 @@ func (s *Service) ExecuteAdvertisingSubmission(userID, projectID, productionID, 
 		if e = checkCreationPriceSignature(repo, task, sig); e != nil {
 			return advertisingConflict("quote_changed", "报价已变化，请重新确认")
 		}
+		// Retained task history must remain approval-bound even after deleting its advertisement.
+		task.Operation = "advertising_generation"
 		if e = createTaskWithStorageQuotaRepository(repo, task, order, policy); e != nil {
 			return e
 		}

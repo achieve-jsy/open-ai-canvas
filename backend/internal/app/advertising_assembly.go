@@ -221,7 +221,11 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 			if kind == "audio" && !info.HasAudio || kind != "audio" && (info.Width <= 0 || info.Height <= 0) {
 				return advertisingConflict("media_probe_failed", "素材缺少所需的真实音视频流")
 			}
-			m = AdvertisingProbedMedia{Resource: *resource, DurationMs: info.DurationMs, Width: info.Width, Height: info.Height}
+			duration := info.DurationMs
+			if kind == "video" {
+				duration = info.VideoDurationMs
+			}
+			m = AdvertisingProbedMedia{Resource: *resource, DurationMs: duration, Width: info.Width, Height: info.Height}
 			probed[resource.ID] = m
 		}
 		media[key], resources[resource.ID] = m, *resource

@@ -321,6 +321,13 @@ assert(project.timeline.clips.every(c => c.directMedia.assetId));
 	if err := db.Exec("DROP TRIGGER fail_assembly").Error; err != nil {
 		t.Fatal(err)
 	}
+	// Container duration must not let a one-second video pass as a five-second shot.
+	if output, err := exec.Command("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x284:rate=30:duration=1", "-f", "lavfi", "-i", "sine=duration=5", "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", videoPath).CombinedOutput(); err != nil {
+		t.Fatalf("mismatched streams: %v %s", err, output)
+	}
+	if _, err := s.CreateAdvertisingAssembly("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, "20000000-0000-4000-8000-000000000005", "pad"); err == nil {
+		t.Fatal("short video accepted using longer audio/container duration")
+	}
 	if err := db.Model(&model.Resource{}).Where("id = ?", resource.ID).Update("object_key", "missing.mp4").Error; err != nil {
 		t.Fatal(err)
 	}

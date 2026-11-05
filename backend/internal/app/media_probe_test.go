@@ -66,6 +66,12 @@ func TestParseMediaProbeOutput(t *testing.T) {
 			}
 		})
 	}
+	for _, duration := range []string{"N/A", "NaN", "+Inf", "-1"} {
+		info, err := parseMediaProbeOutput([]byte(`{"streams":[{"codec_type":"video","width":160,"height":284,"duration":"` + duration + `"}],"format":{"duration":"5"}}`))
+		if err != nil || info.VideoDurationMs != 0 || info.DurationMs != 5000 {
+			t.Fatalf("unknown video duration trusted container: %+v %v", info, err)
+		}
+	}
 	if _, err := parseMediaProbeOutput([]byte("not json")); err == nil {
 		t.Fatal("invalid probe output: want error")
 	}

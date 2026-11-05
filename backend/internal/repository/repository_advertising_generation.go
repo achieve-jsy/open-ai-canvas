@@ -10,7 +10,8 @@ import (
 
 func (r *Repository) IsAdvertisingGenerationTask(taskID string) (bool, error) {
 	var n int64
-	err := r.db.Model(&model.AdvertisingSubmission{}).Where("task_id = ?", taskID).Count(&n).Error
+	submissions := r.db.Model(&model.AdvertisingSubmission{}).Select("task_id").Where("task_id = ?", taskID)
+	err := r.db.Model(&model.Task{}).Where("id = ? AND (operation = ? OR id IN (?))", taskID, "advertising_generation", submissions).Count(&n).Error
 	return n > 0, err
 }
 
