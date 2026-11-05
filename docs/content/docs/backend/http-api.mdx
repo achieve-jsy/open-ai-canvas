@@ -11,6 +11,12 @@ description: 信封、错误码与 OpenAPI
 
 原因码：`advertising_revision_conflict`(409)、`advertising_invalid_document`(400)、`advertising_resource_unavailable`(400)、`advertising_resource_in_use`(409)、`advertising_active_tasks`(409)。重名复用`project_name_conflict`。字段限制见OpenAPI；业务流程见[广告项目](./advertising-project)。
 
+## 广告制作接口
+
+以`/ad-projects/:id/productions`为入口，POST创建/恢复确认版本制作；`/:productionId` GET读取、PATCH整份设置CAS；`/submissions` GET分页、POST报价；`/submissions/:submissionId/execute` POST显式批准；`/assemblies` GET历史、POST组装；`/assemblies/:assemblyId` GET详情；`/assemblies/:assemblyId/renders` GET历史、POST新导出尝试。全部沿用登录、归属、256KiB严格正文及最大100条分页合同。
+
+追加409原因码：`advertising_production_conflict`、`advertising_operation_conflict`、`advertising_submission_mismatch`、`advertising_approval_required`、`advertising_quote_changed`、`advertising_quote_expired`、`advertising_candidate_unavailable`、`advertising_duration_invalid`、`advertising_media_probe_failed`、`advertising_resource_changed`、`advertising_assembly_changed`、`advertising_render_retry_required`。用户跨项目/制作访问返回404。已批准提交重放同任务；旧渲染操作键永不创建新任务。步骤与环境边界见[广告生成与成片](./advertising-generation)。
+
 ## 广告时间线合成
 
 `POST /api/timeline/renders` 接收时间线资源快照和可选业务项目ID。增强模式支持 output、文字/Logo overlay 和硬字幕；非法参数与不可用资源返回400，执行失败进入任务失败态。任务resultJson含subtitlesBurned和overlayCount，客户端不得自动退化或重复提交。详见[广告时间线合成基础](./advertising-render)。

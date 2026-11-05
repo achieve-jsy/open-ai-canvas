@@ -10,6 +10,7 @@ import { getResource, resourceFileUrl, resourceIdFromStorageKey } from "@/servic
 import { parseBackendGenerationResult } from "@/services/api/generation-task";
 import * as api from "@/services/api/advertising-generation";
 import { ApiError } from "@/services/api/request";
+import { getActiveUserScope } from "@/lib/user-scope";
 import { ADVERTISING_REASONS } from "@/services/api/error-codes";
 
 export function AdvertisingShotGeneration({
@@ -234,7 +235,7 @@ function AdvertisingCandidate({ submission: s, targetMs, selected, start, disabl
     } catch {
         /* Invalid results are not adoptable. */
     }
-    const media = useQuery({ queryKey: ["advertising-candidate", s.productionId, s.id, resourceId], queryFn: () => getResource(resourceId), enabled: !!resourceId, retry: false });
+    const media = useQuery({ queryKey: ["advertising-candidate", getActiveUserScope(), s.productionId, s.id, resourceId], queryFn: () => getResource(resourceId), enabled: !!resourceId, retry: false });
     const [trim, setTrim] = useState(selected ? start : 0);
     const [unreadable, setUnreadable] = useState(false);
     useEffect(() => {

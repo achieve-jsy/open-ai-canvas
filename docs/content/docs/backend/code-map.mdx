@@ -5,6 +5,14 @@ description: 从产品功能快速定位主要代码入口
 
 # 代码功能地图
 
+## 广告生成与成片
+
+- 原生schema80：`models_advertising_generation.go`、`repository_advertising_generation.go`，制作revision及四类不可变记录。
+- 编排：`app/advertising_generation.go`、`advertising_submission.go`、`advertising_candidate.go`、`advertising_assembly.go`、`advertising_render.go`；复用任务、账务和Canvas保存。
+- HTTP：`handler/advertising_generation.go`；公开合同：OpenAPI与`web/src/services/api/advertising-generation.ts`。
+- 真实页面：`ad-projects/advertising-production.tsx`、`advertising-shot-generation.tsx`，复用TimelinePreview及原生媒体控件。
+- 自动验证：`advertising_*_test.go`、React DOM交互；隔离浏览器：`web/scripts/advertising-generation-chrome-e2e.mjs`与仅测试编译的`handler/advertising_browser_test.go`。
+
 ## 广告需求与确认版本
 
 - 模型与持久化：`models_advertising.go`、`repository_advertising.go`；原生schema79。

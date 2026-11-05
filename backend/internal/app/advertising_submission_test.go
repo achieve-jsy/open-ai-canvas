@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -71,6 +72,18 @@ func TestAdvertisingSubmissionLifecycle(t *testing.T) {
 	}
 	id := production.Production.ID
 	req := AdvertisingSubmissionRequest{ClientOperationID: "10000000-0000-4000-8000-000000000010", ShotID: draft.Shots[0].ID, Kind: "video", ModelID: "video-cm"}
+	request, err := svc.advertisingTaskRequest("user", ad.Project.ID, production.ConfirmedSnapshot.Snapshot, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(request.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded canvasGenerationInput
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("worker cannot decode advertised request: %v", err)
+	}
 	sub, err := svc.PrepareAdvertisingSubmission("user", ad.Project.ID, id, req)
 	if err != nil {
 		t.Fatal(err)

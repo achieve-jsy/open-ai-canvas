@@ -202,7 +202,7 @@ func (s *Service) advertisingTaskRequest(userID, projectID string, snapshot Adve
 			return req, BadAuthRequest("视频模型没有覆盖镜头时长的档位")
 		}
 		config["size"], config["videoSeconds"], config["vquality"] = "9:16", strconv.Itoa(duration), video.DefaultResolution
-		config["videoGenerateAudio"] = video.GenerateAudio.Default
+		config["videoGenerateAudio"] = strconv.FormatBool(video.GenerateAudio.Default)
 		prompt = fmt.Sprintf("广告分镜模板v1。商品：%s；受众：%s；卖点：%s；行动号召：%s。画面：%s。保持参考商品一致，不生成字幕或文字。", snapshot.Draft.Brief.ProductName, snapshot.Draft.Brief.Audience, strings.Join(snapshot.Draft.Brief.SellingPoints, "；"), snapshot.Draft.Brief.CTA, shot.Visual)
 		ids := shot.ReferenceResourceIDs
 		if len(ids) == 0 && len(snapshot.Draft.ProductResourceIDs) > 0 {

@@ -124,7 +124,7 @@ export function AdvertisingEditor({ id, userId }: { id: string; userId: string }
     };
     return (
         <WorkspacePage className="ad-workspace">
-            <PageHeader title="广告脚本工作台" description="需求 → 手工脚本 → 确认版本。本阶段不生成视频、不触发模型费用。" actions={<Link to="/ad-projects">返回广告项目</Link>} />
+            <PageHeader title="广告脚本工作台" description="需求 → 脚本确认 → 逐镜头报价批准 → 人工采用 → 时间线与成片。保存和确认脚本不收费。" actions={<Link to="/ad-projects">返回广告项目</Link>} />
             {!saved || !draft ? (
                 <div role={query.error ? "alert" : "status"}>
                     {query.error ? String(query.error) : "正在读取广告…"}

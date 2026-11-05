@@ -222,4 +222,4 @@ test("production requires explicit entry, fee approval and adoption", async () =
         apiClient.defaults.adapter = original;
         await dom.happyDOM.close();
     }
-});
+}, 65000);

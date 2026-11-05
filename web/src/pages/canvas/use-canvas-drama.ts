@@ -109,7 +109,8 @@ function withDramaMedia(node: CanvasNodeData, resourceId: string, assetId: strin
 }
 
 export function useCanvasDrama(input: UseCanvasDramaInput) {
-    const { canvasId, dramaId, projectLoaded, nodes, nodesRef, setNodes, setConnections, searchParams, setSearchParams } = input;
+    const { canvasId, projectLoaded, nodes, nodesRef, setNodes, setConnections, searchParams, setSearchParams } = input;
+    const dramaId = input.dramaId.startsWith("ad_") ? "" : input.dramaId;
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
 
