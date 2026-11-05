@@ -19,13 +19,6 @@ OpenCanvas是一个开源的 AI 影视与短剧创作工作台。上传一本小
   <img src="assets/screenshots/storyboard.jpg" alt="短剧制作：分镜视图，每段显示镜头、台词、参考图和视频生成状态" width="100%">
 </p>
 
-<p align="center">
-  <a href="https://yingce.tv"><strong>在线演示 yingce.tv</strong></a>（账号/密码：test/test123456） ·
-  <a href="#快速开始">本地启动</a>
-</p>
-
-> 项目仍在快速开发，数据结构和外部接口可能调整。默认适合个人、本地或可信环境部署；未经安全配置，不要直接作为公网多人服务使用。
-
 ## 下个版本：OpenCanvas世界引擎（内测中）
 
 在 3D 世界里搭场景、排机位、做动画：天气、布景、建筑、花木和角色直接摆进场景，在地面标记 A、B 点后，用一句话告诉 Agent「将角色从 B 点跑步移动到 A 点」，它会补问细节并生成关键帧。镜头可在时间轴上编排，并导出白模和深度画面作为视频生成的参考。
@@ -33,7 +26,6 @@ OpenCanvas是一个开源的 AI 影视与短剧创作工作台。上传一本小
 <p align="center">
   <img src="assets/screenshots/3d.png" alt="OpenCanvas世界引擎：古代集市 3D 场景、A/B 标记点、主摄影机、时间轴与 Agent 对话面板" width="100%">
 </p>
-
 
 > **关于本仓库**：fork 自 [ddcat-ai/open-ai-canvas](https://github.com/ddcat-ai/open-ai-canvas)（MIT License），版权归原作者及全部贡献者所有。本仓库仅用于个人学习与二次开发，品牌名称改为 OpenCanvas。
 
