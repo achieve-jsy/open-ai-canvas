@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useDismissPopupOnAnchorMove } from "@/hooks/use-dismiss-popup-on-anchor-move";
 
 /**
- * 影策唯一下拉选择组件。
+ * OpenCanvas唯一下拉选择组件。
  *
  * 所有单选、多选、可搜索选择都复用 Ant Design 的同一实现；本文件只负责
  * 统一项目内的入口、尺寸别名、ariaLabel 兼容和公共 class，避免页面各自维护
