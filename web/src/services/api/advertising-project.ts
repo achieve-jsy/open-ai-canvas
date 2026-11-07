@@ -1,7 +1,7 @@
 import { compactApiParams, http } from "./request";
 import type { Project } from "./projects";
 
-export type AdvertisingBrief = { productName: string; description: string; audience: string; sellingPoints: string[]; cta: string; durationMs: number };
+export type AdvertisingBrief = { productName: string; description: string; goal?: "awareness" | "conversion"; audience: string; sellingPoints: string[]; cta: string; durationMs: number };
 export type AdvertisingBrand = { name: string; primaryColor: string; logoResourceId: string };
 export type AdvertisingShot = { id: string; durationMs: number; visual: string; voiceover: string; onScreenText: string; referenceResourceIds: string[] };
 export type AdvertisingDraft = { schemaVersion: 1; brief: AdvertisingBrief; brand: AdvertisingBrand; productResourceIds: string[]; additionalResourceIds: string[]; shots: AdvertisingShot[] };
@@ -14,12 +14,24 @@ export type AdvertisingConfirmation = { snapshot: AdvertisingRevisionDetail; cur
 export type AdvertisingListItem = { id: string; name: string; productName: string; durationMs: number; revision: number; latestConfirmedRevisionId?: string; updatedAt: string };
 export type AdvertisingPage<T> = { items: T[]; page: number; pageSize: number; total: number };
 export type AdvertisingSaveRequest = { name: string; draft: AdvertisingDraft; expectedRevision: number };
+export type AdvertisingScriptPlan = {
+    operationId: string;
+    sourceRevision: number;
+    status: "running" | "ready" | "blocked" | "failed";
+    draft?: AdvertisingDraft;
+    evidence?: { claim: string; source: string; resourceId?: string }[];
+    uncertainties?: string[];
+    error?: string;
+};
 const base = (id: string) => `/ad-projects/` + encodeURIComponent(id);
 export const listAdvertisingProjects = (page = 1, pageSize = 20, signal?: AbortSignal) => http.get<AdvertisingPage<AdvertisingListItem>>("/ad-projects", { params: compactApiParams({ page, pageSize }), signal });
 export const createAdvertisingProject = (name: string) => http.post<AdvertisingDetail>("/ad-projects", { name });
 export const getAdvertisingProject = (id: string, signal?: AbortSignal) => http.get<AdvertisingDetail>(base(id), { signal });
 export const saveAdvertisingProject = (id: string, request: AdvertisingSaveRequest) => http.put<AdvertisingDetail>(base(id), request);
 export const confirmAdvertisingProject = (id: string, expectedRevision: number) => http.post<AdvertisingConfirmation>(base(id) + "/confirm", { expectedRevision });
+export const createAdvertisingScriptPlan = (id: string, request: { expectedRevision: number; clientOperationId: string }) => http.post<AdvertisingScriptPlan>(base(id) + "/script-plans", request);
+export const getAdvertisingScriptPlan = (id: string, operationId: string, signal?: AbortSignal) => http.get<AdvertisingScriptPlan>(base(id) + "/script-plans/" + encodeURIComponent(operationId), { signal });
+export const getLatestAdvertisingScriptPlan = (id: string, signal?: AbortSignal) => http.get<AdvertisingScriptPlan | null>(base(id) + "/script-plans", { signal });
 export const listAdvertisingRevisions = (id: string, page = 1, pageSize = 20, signal?: AbortSignal) => http.get<AdvertisingPage<AdvertisingRevisionSummary>>(base(id) + "/revisions", { params: compactApiParams({ page, pageSize }), signal });
 export const getAdvertisingRevision = (id: string, revisionId: string, signal?: AbortSignal) => http.get<AdvertisingRevisionDetail>(base(id) + "/revisions/" + encodeURIComponent(revisionId), { signal });
 export const deleteAdvertisingProject = (id: string, expectedRevision: number) => http.delete<{ deleted: boolean }>(base(id), { params: compactApiParams({ expectedRevision }) });

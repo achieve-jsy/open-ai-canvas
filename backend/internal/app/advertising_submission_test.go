@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 	"yingce/backend/internal/model"
@@ -75,6 +76,16 @@ func TestAdvertisingSubmissionLifecycle(t *testing.T) {
 	request, err := svc.advertisingTaskRequest("user", ad.Project.ID, production.ConfirmedSnapshot.Snapshot, req)
 	if err != nil {
 		t.Fatal(err)
+	}
+	bare := production.ConfirmedSnapshot.Snapshot
+	bare.Draft.Brief.ProductName, bare.Draft.Brief.Audience, bare.Draft.Brief.CTA = "", "", ""
+	bare.Draft.Brief.SellingPoints = nil
+	bareRequest, err := svc.advertisingTaskRequest("user", ad.Project.ID, bare, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(bareRequest.Prompt, "卖点：") || strings.Contains(bareRequest.Prompt, "行动号召：") || !strings.Contains(bareRequest.Prompt, "不添加未经确认") {
+		t.Fatalf("unverified product claims leaked into video prompt: %s", bareRequest.Prompt)
 	}
 	raw, err := json.Marshal(request.Input)
 	if err != nil {

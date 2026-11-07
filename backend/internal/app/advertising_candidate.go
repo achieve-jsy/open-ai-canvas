@@ -47,7 +47,10 @@ func (s *Service) registerAdvertisingTaskOutput(repo *repository.Repository, tas
 	if !advertisingCandidateMediaReady(resource, submission.Kind) {
 		return advertisingCandidateUnavailable()
 	}
-	return repo.ReplaceAdvertisingReferences(production.ProjectID, "candidate:"+submission.ID, []string{id})
+	if err := repo.ReplaceAdvertisingReferences(production.ProjectID, "candidate:"+submission.ID, []string{id}); err != nil {
+		return err
+	}
+	return advertisingProductionEvent(repo, task.UserID, task.ProjectID, production.ID, "output:"+task.ID, "candidate_output", submission.ShotID, submission.ID, "", "", AdvertisingEventDetails{TaskID: task.ID, Status: "succeeded"})
 }
 
 func advertisingCandidateMediaReady(resource *model.Resource, kind string) bool {

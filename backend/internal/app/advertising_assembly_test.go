@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -196,6 +197,21 @@ func TestAdvertisingAssemblyReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := "20000000-0000-4000-8000-000000000001"
+	if err := db.Exec("CREATE TRIGGER fail_assembly_audit BEFORE INSERT ON advertising_events WHEN NEW.kind = 'assembly_created' BEGIN SELECT RAISE(ABORT, 'audit failed'); END").Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAdvertisingAssembly("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, key, "pad"); err == nil {
+		t.Fatal("assembly escaped audit rollback")
+	}
+	for _, row := range []any{&model.AdvertisingAssembly{}, &model.CanvasProject{}, &model.Asset{}} {
+		var n int64
+		if err := db.Model(row).Count(&n).Error; err != nil || n != 0 {
+			t.Fatalf("assembly artifact escaped audit: %T %d %v", row, n, err)
+		}
+	}
+	if err := db.Exec("DROP TRIGGER fail_assembly_audit").Error; err != nil {
+		t.Fatal(err)
+	}
 	var wg sync.WaitGroup
 	rows := make(chan AdvertisingAssemblyDetail, 2)
 	errs := make(chan error, 2)
@@ -216,12 +232,41 @@ func TestAdvertisingAssemblyReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	var eventCount int64
+	if err := db.Model(&model.AdvertisingEvent{}).Where("kind = ?", "assembly_created").Count(&eventCount).Error; err != nil || eventCount != 1 {
+		t.Fatal("duplicate assembly audit", eventCount, err)
+	}
 	var assembled AdvertisingAssemblyDetail
 	for row := range rows {
 		if assembled.ID != "" && assembled.ID != row.ID {
 			t.Fatal("duplicate assembly")
 		}
 		assembled = row
+	}
+	// Full real assembly -> FFmpeg -> CP5 -> same-output CP6, not a mocked success.
+	attempt, err := s.CreateAdvertisingRender("owner", ad.Project.ID, p.Production.ID, assembled.ID, "30000000-0000-4000-8000-000000000099")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.repo.TaskForUser("owner", attempt.Task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Status = model.TaskStatusRunning
+	db.Model(&model.Task{}).Where("id = ?", task.ID).Update("status", model.TaskStatusRunning)
+	if err = newTaskWorkerCoordinator(s).processTimelineRender(task, context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := s.CreateAdvertisingRender("owner", ad.Project.ID, p.Production.ID, assembled.ID, attempt.ClientOperationID)
+	if err != nil || !rendered.Available {
+		t.Fatalf("real cut: %v", err)
+	}
+	approval, err := s.CreateAdvertisingReview("owner", ad.Project.ID, p.Production.ID, AdvertisingReviewRequest{ClientOperationID: "40000000-0000-4000-8000-000000000001", ExpectedProductionRevision: p.Production.Revision, Checkpoint: "assembly", AssemblyID: assembled.ID, RenderAttemptID: rendered.ID, ResourceID: rendered.ResourceID, Decision: "approve", Reason: "real FFmpeg output"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CreateAdvertisingReview("owner", ad.Project.ID, p.Production.ID, AdvertisingReviewRequest{ClientOperationID: "40000000-0000-4000-8000-000000000002", ExpectedProductionRevision: p.Production.Revision, Checkpoint: "delivery", AssemblyID: assembled.ID, RenderAttemptID: rendered.ID, ResourceID: rendered.ResourceID, AcceptedReviewID: approval.Review.ID, Decision: "approve", Reason: "same real output"}); err != nil {
+		t.Fatal(err)
 	}
 	if assembled.CanvasID == nil {
 		t.Fatal("missing canvas")
@@ -300,6 +345,11 @@ assert(project.timeline.clips.every(c => c.directMedia.assetId));
 	if _, err := s.GetAdvertisingAssembly("other", ad.Project.ID, p.Production.ID, assembled.ID); err == nil {
 		t.Fatal("cross user")
 	}
+	p.Settings.Fit = "crop"
+	p, err = s.SaveAdvertisingProductionSettings("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, p.Settings)
+	if err != nil {
+		t.Fatal(err)
+	}
 	next, err := s.CreateAdvertisingAssembly("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, "20000000-0000-4000-8000-000000000002", "crop")
 	if err != nil || next.CanvasID == nil || *next.CanvasID == *assembled.CanvasID {
 		t.Fatalf("new assembly: %+v %v", next, err)
@@ -311,7 +361,7 @@ assert(project.timeline.clips.every(c => c.directMedia.assetId));
 	if err := db.Exec("CREATE TRIGGER fail_assembly BEFORE INSERT ON advertising_assemblies BEGIN SELECT RAISE(ABORT, 'assembly registration failed'); END").Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAdvertisingAssembly("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, "20000000-0000-4000-8000-000000000004", "pad"); err == nil {
+	if _, err := s.CreateAdvertisingAssembly("owner", ad.Project.ID, p.Production.ID, p.Production.Revision, "20000000-0000-4000-8000-000000000004", "crop"); err == nil {
 		t.Fatal("expected assembly insert failure")
 	}
 	var canvasCount int64

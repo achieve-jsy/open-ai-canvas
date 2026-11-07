@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const CurrentSchemaVersion int64 = 80
+const CurrentSchemaVersion int64 = 84
 
 const baselineSchemaChecksum = "sha256:open-ai-canvas-schema-v1-20260830"
 const schemaMigrationAppliedAtIndexChecksum = "sha256:schema-migrations-applied-at-index-v2-20260830"
@@ -280,6 +280,28 @@ var schemaMigrations = []migration{
 	}},
 	{version: 80, name: "advertising_generation", checksum: "sha256:advertising-generation-v80-20261104", apply: func(tx *gorm.DB) error {
 		return tx.AutoMigrate(&model.AdvertisingResourceReference{}, &model.AdvertisingProduction{}, &model.AdvertisingSubmission{}, &model.AdvertisingAssembly{}, &model.AdvertisingRenderAttempt{})
+	}},
+	{version: 81, name: "advertising_script_plans", checksum: "sha256:advertising-script-plans-v81-20261105", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AdvertisingScriptPlan{})
+	}},
+	{version: 82, name: "advertising_candidate_batches", checksum: "sha256:advertising-candidate-batches-v82-20261106", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AdvertisingCandidateBatch{}, &model.AdvertisingSubmission{})
+	}},
+	{version: 83, name: "advertising_reviews", checksum: "sha256:advertising-reviews-v83-20261106", apply: func(tx *gorm.DB) error {
+		return tx.AutoMigrate(&model.AdvertisingEvent{}, &model.AdvertisingReview{}, &model.AdvertisingIssue{})
+	}},
+	{version: 84, name: "advertising_cut_provenance", checksum: "sha256:advertising-cut-provenance-v84-20261106", apply: func(tx *gorm.DB) error {
+		for _, field := range []string{"ProvenanceJSON", "SourceFingerprint"} {
+			if !tx.Migrator().HasColumn(&model.AdvertisingAssembly{}, field) {
+				if err := tx.Migrator().AddColumn(&model.AdvertisingAssembly{}, field); err != nil {
+					return err
+				}
+			}
+		}
+		if !tx.Migrator().HasColumn(&model.AdvertisingReview{}, "AcceptedReviewID") {
+			return tx.Migrator().AddColumn(&model.AdvertisingReview{}, "AcceptedReviewID")
+		}
+		return nil
 	}},
 }
 

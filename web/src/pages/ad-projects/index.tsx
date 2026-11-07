@@ -60,7 +60,7 @@ function AdvertisingList({ userId }: { userId: string }) {
         <WorkspacePage className="ad-workspace">
             <PageHeader
                 title="广告项目"
-                description="从商品需求开始，编写15–30秒竖屏广告脚本，确认后保留不可变版本。"
+                description="一张商品图、一段场景描述，从15秒广告脚本开始，逐步制作与交付。"
                 actions={
                     <Button
                         type="primary"
@@ -83,7 +83,7 @@ function AdvertisingList({ userId }: { userId: string }) {
             ) : query.data.items.length === 0 ? (
                 <section className="ad-section mt-4">
                     <h2>先确定要讲清楚的一件事</h2>
-                    <p>新建广告项目，添加商品图、受众和卖点，再手工编写分镜。当前阶段不生成视频。</p>
+                    <p>添加一张商品图与广告场景，让 AI 建议三个镜头；核对脚本后再进入制作。高级手工编辑仍可使用，视频生成需单独授权费用。</p>
                 </section>
             ) : (
                 <ul className="grid gap-4 mt-4 md:grid-cols-2 xl:grid-cols-3">
@@ -100,7 +100,7 @@ function AdvertisingList({ userId }: { userId: string }) {
                             </p>
                             <p className="text-muted-foreground">更新于 {new Date(item.updatedAt).toLocaleString()}</p>
                             <div className="flex gap-3">
-                                <Link to={"/ad-projects/" + item.id}>打开脚本</Link>
+                                <Link to={"/ad-projects/" + item.id}>打开制作工作台</Link>
                                 <Button
                                     danger
                                     onClick={() => {

@@ -91,6 +91,13 @@ func (s *Service) CreateAdvertisingRender(userID, projectID, productionID, assem
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		active, err := repo.HasActiveAdvertisingRender(assemblyID)
+		if err != nil {
+			return err
+		}
+		if active {
+			return advertisingConflict("render_active", "同一组装已有活动或结果未核实的渲染，请查询原任务")
+		}
 		current, err := repo.AdvertisingAssembly(productionID, assemblyID)
 		if err != nil {
 			return err
@@ -107,6 +114,9 @@ func (s *Service) CreateAdvertisingRender(userID, projectID, productionID, assem
 		}
 		row := model.AdvertisingRenderAttempt{ID: newID(), AssemblyID: assemblyID, ClientOperationID: operationID, TaskID: task.ID, CreatedAt: time.Now().UTC()}
 		if err := repo.CreateAdvertisingRender(&row); err != nil {
+			return err
+		}
+		if err := advertisingProductionEvent(repo, userID, projectID, productionID, "render:"+row.ID, "render_created", "", "", assemblyID, row.ID, AdvertisingEventDetails{TaskID: task.ID}); err != nil {
 			return err
 		}
 		result, err = s.advertisingRenderDetail(repo, userID, &row)
@@ -177,5 +187,8 @@ func (s *Service) registerAdvertisingRenderOutput(repo *repository.Repository, t
 	if resource.Status != model.ResourceStatusReady || resource.MimeType != "video/mp4" || resource.DurationMs <= 0 {
 		return advertisingCandidateUnavailable()
 	}
-	return repo.ReplaceAdvertisingReferences(production.ProjectID, "render:"+attempt.ID, []string{resource.ID})
+	if err := repo.ReplaceAdvertisingReferences(production.ProjectID, "render:"+attempt.ID, []string{resource.ID}); err != nil {
+		return err
+	}
+	return advertisingProductionEvent(repo, task.UserID, task.ProjectID, production.ID, "output:"+task.ID, "render_output", "", "", assembly.ID, attempt.ID, AdvertisingEventDetails{TaskID: task.ID, Status: "succeeded"})
 }

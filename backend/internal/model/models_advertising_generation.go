@@ -16,25 +16,30 @@ type AdvertisingProduction struct {
 }
 
 type AdvertisingSubmission struct {
-	ID                string                 `json:"id" gorm:"primaryKey;size:36"`
-	ProductionID      string                 `json:"productionId" gorm:"size:36;not null;uniqueIndex:idx_ad_submission_operation,priority:1"`
-	ShotID            string                 `json:"shotId" gorm:"size:36;not null"`
-	Kind              string                 `json:"kind" gorm:"size:8;not null"`
-	ClientOperationID string                 `json:"clientOperationId" gorm:"size:36;not null;uniqueIndex:idx_ad_submission_operation,priority:2"`
-	RequestHash       string                 `json:"requestHash" gorm:"size:64;not null"`
-	RequestJSON       string                 `json:"-" gorm:"type:text;not null"`
-	QuoteJSON         string                 `json:"-" gorm:"type:text;not null"`
-	PriceSignature    string                 `json:"-" gorm:"type:text;not null"`
-	ExpiresAt         time.Time              `json:"expiresAt"`
-	ApprovedAt        *time.Time             `json:"approvedAt,omitempty"`
-	TaskID            *string                `json:"taskId,omitempty" gorm:"size:36;uniqueIndex"`
-	CreatedAt         time.Time              `json:"createdAt"`
-	UpdatedAt         time.Time              `json:"updatedAt"`
-	Production        *AdvertisingProduction `json:"-" gorm:"foreignKey:ProductionID;references:ID;constraint:OnDelete:RESTRICT"`
-	Task              *Task                  `json:"-" gorm:"foreignKey:TaskID;references:ID;constraint:OnDelete:RESTRICT"`
+	BatchID           *string                    `json:"batchId,omitempty" gorm:"size:36;uniqueIndex:idx_ad_batch_candidate,priority:1"`
+	CandidateIndex    *int                       `json:"candidateIndex,omitempty" gorm:"uniqueIndex:idx_ad_batch_candidate,priority:2"`
+	Batch             *AdvertisingCandidateBatch `json:"-" gorm:"foreignKey:BatchID;references:ID;constraint:OnDelete:RESTRICT"`
+	ID                string                     `json:"id" gorm:"primaryKey;size:36"`
+	ProductionID      string                     `json:"productionId" gorm:"size:36;not null;uniqueIndex:idx_ad_submission_operation,priority:1"`
+	ShotID            string                     `json:"shotId" gorm:"size:36;not null"`
+	Kind              string                     `json:"kind" gorm:"size:8;not null"`
+	ClientOperationID string                     `json:"clientOperationId" gorm:"size:36;not null;uniqueIndex:idx_ad_submission_operation,priority:2"`
+	RequestHash       string                     `json:"requestHash" gorm:"size:64;not null"`
+	RequestJSON       string                     `json:"-" gorm:"type:text;not null"`
+	QuoteJSON         string                     `json:"-" gorm:"type:text;not null"`
+	PriceSignature    string                     `json:"-" gorm:"type:text;not null"`
+	ExpiresAt         time.Time                  `json:"expiresAt"`
+	ApprovedAt        *time.Time                 `json:"approvedAt,omitempty"`
+	TaskID            *string                    `json:"taskId,omitempty" gorm:"size:36;uniqueIndex"`
+	CreatedAt         time.Time                  `json:"createdAt"`
+	UpdatedAt         time.Time                  `json:"updatedAt"`
+	Production        *AdvertisingProduction     `json:"-" gorm:"foreignKey:ProductionID;references:ID;constraint:OnDelete:RESTRICT"`
+	Task              *Task                      `json:"-" gorm:"foreignKey:TaskID;references:ID;constraint:OnDelete:RESTRICT"`
 }
 
 type AdvertisingAssembly struct {
+	ProvenanceJSON           *string                `json:"-" gorm:"type:text"`
+	SourceFingerprint        *string                `json:"sourceFingerprint,omitempty" gorm:"size:64"`
 	ID                       string                 `json:"id" gorm:"primaryKey;size:36"`
 	ProductionID             string                 `json:"productionId" gorm:"size:36;not null;uniqueIndex:idx_ad_assembly_operation,priority:1"`
 	ClientOperationID        string                 `json:"clientOperationId" gorm:"size:36;not null;uniqueIndex:idx_ad_assembly_operation,priority:2"`

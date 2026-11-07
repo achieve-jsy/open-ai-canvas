@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"math"
 	"slices"
@@ -17,6 +18,7 @@ type AdvertisingSelection struct {
 	VideoStartMs      int64  `json:"videoStartMs"`
 }
 type AdvertisingProductionSettings struct {
+	Fit             string                          `json:"fit"`
 	TTSModelID      string                          `json:"ttsModelId"`
 	VoiceID         string                          `json:"voiceId"`
 	Selections      map[string]AdvertisingSelection `json:"selections"`
@@ -45,6 +47,9 @@ func advertisingProductionDetail(repo *repository.Repository, userID, projectID,
 	if err := json.Unmarshal([]byte(row.SettingsJSON), &result.Settings); err != nil {
 		return result, err
 	}
+	if result.Settings.Fit == "" {
+		result.Settings.Fit = "pad"
+	}
 	confirmed, err := repo.AdvertisingRevisionForUser(userID, projectID, row.ConfirmedRevisionID)
 	if err != nil {
 		return result, err
@@ -64,7 +69,7 @@ func (s *Service) CreateAdvertisingProduction(userID, projectID, confirmedRevisi
 		row, err := repo.AdvertisingProductionForRevision(projectID, confirmedRevisionID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			volume := 0.15
-			settings, err := json.Marshal(AdvertisingProductionSettings{Selections: map[string]AdvertisingSelection{}, MusicVolume: &volume})
+			settings, err := json.Marshal(AdvertisingProductionSettings{Fit: "pad", Selections: map[string]AdvertisingSelection{}, MusicVolume: &volume})
 			if err != nil {
 				return err
 			}
@@ -88,6 +93,12 @@ func (s *Service) GetAdvertisingProduction(userID, projectID, id string) (Advert
 	return result, advertisingProductionFailure(err)
 }
 func (s *Service) validateAdvertisingProductionSettings(repo *repository.Repository, userID, productionID string, snapshot AdvertisingSnapshot, settings *AdvertisingProductionSettings) error {
+	if settings.Fit == "" {
+		settings.Fit = "pad"
+	}
+	if settings.Fit != "pad" && settings.Fit != "crop" {
+		return BadAuthRequest("画幅适配仅支持pad或crop")
+	}
 	for name, value := range map[string]string{"ttsModelId": settings.TTSModelID, "voiceId": settings.VoiceID} {
 		if err := advertisingText(name, value, 120, false); err != nil {
 			return BadAuthRequest(err.Error())
@@ -122,8 +133,12 @@ func (s *Service) validateAdvertisingProductionSettings(repo *repository.Reposit
 			return BadAuthRequest("未选择视频时不能设置裁剪起点")
 		}
 		if selection.AudioSubmissionID != "" {
-			if _, err := s.getAdvertisingCandidateResource(repo, userID, productionID, id, "audio", selection.AudioSubmissionID); err != nil {
+			resource, err := s.getAdvertisingCandidateResource(repo, userID, productionID, id, "audio", selection.AudioSubmissionID)
+			if err != nil {
 				return err
+			}
+			if resource.DurationMs > shot.DurationMs {
+				return advertisingCandidateUnavailable()
 			}
 		}
 	}
@@ -170,6 +185,14 @@ func (s *Service) SaveAdvertisingProductionSettings(userID, projectID, id string
 		}
 		if err := repo.ReplaceAdvertisingReferences(projectID, "production:"+id, ids); err != nil {
 			return err
+		}
+		for _, shot := range current.ConfirmedSnapshot.Snapshot.Draft.Shots {
+			selection := settings.Selections[shot.ID]
+			if current.Settings.Selections[shot.ID] != selection {
+				if err := advertisingProductionEvent(repo, userID, projectID, id, fmt.Sprintf("selection:%s:%d:%s", id, expectedRevision+1, shot.ID), "selection_changed", shot.ID, "", "", "", AdvertisingEventDetails{Selection: &selection}); err != nil {
+					return err
+				}
+			}
 		}
 		result, err = advertisingProductionDetail(repo, userID, projectID, id)
 		return err

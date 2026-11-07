@@ -11,6 +11,7 @@ import (
 type AdvertisingBrief struct {
 	ProductName   string   `json:"productName"`
 	Description   string   `json:"description"`
+	Goal          string   `json:"goal,omitempty"`
 	Audience      string   `json:"audience"`
 	SellingPoints []string `json:"sellingPoints"`
 	CTA           string   `json:"cta"`
@@ -76,12 +77,15 @@ func validateAdvertisingDraft(d AdvertisingDraft, confirm bool) error {
 	if d.SchemaVersion != 1 {
 		return fmt.Errorf("schemaVersion: 仅支持1")
 	}
+	if d.Brief.Goal != "" && d.Brief.Goal != "awareness" && d.Brief.Goal != "conversion" {
+		return fmt.Errorf("brief.goal: 不支持的广告目标")
+	}
 	for _, f := range []struct {
 		name, value string
 		max         int
 		required    bool
 	}{
-		{"brief.productName", d.Brief.ProductName, 120, confirm}, {"brief.description", d.Brief.Description, 2000, false}, {"brief.audience", d.Brief.Audience, 300, confirm}, {"brief.cta", d.Brief.CTA, 80, confirm}, {"brand.name", d.Brand.Name, 120, false},
+		{"brief.productName", d.Brief.ProductName, 120, false}, {"brief.description", d.Brief.Description, 2000, false}, {"brief.audience", d.Brief.Audience, 300, false}, {"brief.cta", d.Brief.CTA, 80, false}, {"brand.name", d.Brand.Name, 120, false},
 	} {
 		if err := advertisingText(f.name, f.value, f.max, f.required); err != nil {
 			return err
@@ -90,8 +94,8 @@ func validateAdvertisingDraft(d AdvertisingDraft, confirm bool) error {
 	if d.Brief.DurationMs < 15000 || d.Brief.DurationMs > 30000 {
 		return fmt.Errorf("brief.durationMs: 必须为15000–30000毫秒")
 	}
-	if len(d.Brief.SellingPoints) > 5 || (confirm && len(d.Brief.SellingPoints) == 0) {
-		return fmt.Errorf("brief.sellingPoints: 确认时需要1–5条")
+	if len(d.Brief.SellingPoints) > 5 {
+		return fmt.Errorf("brief.sellingPoints: 最多5条")
 	}
 	for _, point := range d.Brief.SellingPoints {
 		if err := advertisingText("brief.sellingPoints", point, 120, true); err != nil {

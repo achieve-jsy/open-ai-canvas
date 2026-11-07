@@ -1,7 +1,20 @@
-import type { AdvertisingDraft, AdvertisingShot } from "@/services/api/advertising-project";
+import { resourceFileUrl } from "@/services/api/resources";
+import type { AdvertisingResource, AdvertisingDraft, AdvertisingShot } from "@/services/api/advertising-project";
 
 // Native labelled fields inherit workspace tokens; this form owns no server state.
-export function AdvertisingDraftForm({ value, onChange, disabled = false }: { value: AdvertisingDraft; onChange: (next: AdvertisingDraft) => void; disabled?: boolean }) {
+export function AdvertisingDraftForm({
+    value,
+    onChange,
+    disabled = false,
+    mode = "all",
+    resources = [],
+}: {
+    value: AdvertisingDraft;
+    onChange: (next: AdvertisingDraft) => void;
+    disabled?: boolean;
+    mode?: "all" | "brief" | "script";
+    resources?: AdvertisingResource[];
+}) {
     const brief = (patch: Partial<AdvertisingDraft["brief"]>) => onChange({ ...value, brief: { ...value.brief, ...patch } });
     const brand = (patch: Partial<AdvertisingDraft["brand"]>) => onChange({ ...value, brand: { ...value.brand, ...patch } });
     const shot = (id: string, patch: Partial<AdvertisingShot>) => onChange({ ...value, shots: value.shots.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
@@ -13,58 +26,75 @@ export function AdvertisingDraftForm({ value, onChange, disabled = false }: { va
     const pool = [...new Set([...value.productResourceIds, ...value.additionalResourceIds])];
     return (
         <fieldset disabled={disabled} className="ad-form space-y-5 min-w-0">
-            <section className="ad-section">
-                <h2>需求与品牌</h2>
-                <p className="text-muted-foreground">中文 · 单商品 · 竖屏 1080×1920 · 15–30秒。草稿可不完整，确认时须满足全部要求。</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <label>
-                        商品名称
-                        <input aria-label="商品名称" maxLength={120} value={value.brief.productName} onChange={(e) => brief({ productName: e.target.value })} />
-                    </label>
-                    <label>
-                        目标受众
-                        <input maxLength={300} value={value.brief.audience} onChange={(e) => brief({ audience: e.target.value })} />
-                    </label>
-                    <label className="sm:col-span-2">
-                        商品描述
-                        <textarea rows={3} maxLength={2000} value={value.brief.description} onChange={(e) => brief({ description: e.target.value })} />
-                    </label>
-                    <div>
-                        <span>核心卖点（最多5条）</span>
-                        {value.brief.sellingPoints.map((point, i) => (
-                            <label key={i}>
-                                卖点{i + 1}
-                                <div className="flex gap-2">
-                                    <input aria-label={"卖点" + (i + 1)} maxLength={120} value={point} onChange={(e) => brief({ sellingPoints: value.brief.sellingPoints.map((p, j) => (i === j ? e.target.value : p)) })} />
-                                    <button type="button" onClick={() => brief({ sellingPoints: value.brief.sellingPoints.filter((_, j) => i !== j) })}>
-                                        移除
-                                    </button>
-                                </div>
+            <section className="ad-section" hidden={mode === "script"}>
+                <h2>广告需求</h2>
+                <label>
+                    广告场景
+                    <textarea aria-label="广告场景" rows={3} maxLength={2000} value={value.brief.description} onChange={(e) => brief({ description: e.target.value })} />
+                </label>
+                <label>
+                    广告目标
+                    <select
+                        aria-label="广告目标"
+                        className="w-full min-w-0 rounded-sm border border-border bg-background px-3 py-2 text-foreground"
+                        value={value.brief.goal ?? ""}
+                        onChange={(e) => brief({ goal: (e.target.value || undefined) as AdvertisingDraft["brief"]["goal"], ...(e.target.value === "awareness" ? { cta: "" } : {}) })}
+                    >
+                        <option value="">未选择</option>
+                        <option value="awareness">品牌认知</option>
+                        <option value="conversion">引导转化</option>
+                    </select>
+                </label>
+                <details>
+                    <summary className="cursor-pointer">完善商品与品牌信息</summary>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <label>
+                            商品名称
+                            <input aria-label="商品名称" maxLength={120} value={value.brief.productName} onChange={(e) => brief({ productName: e.target.value })} />
+                        </label>
+                        <label>
+                            目标受众
+                            <input maxLength={300} value={value.brief.audience} onChange={(e) => brief({ audience: e.target.value })} />
+                        </label>
+                        <div>
+                            <span>核心卖点（最多5条）</span>
+                            {value.brief.sellingPoints.map((point, i) => (
+                                <label key={i}>
+                                    卖点{i + 1}
+                                    <div className="flex gap-2">
+                                        <input aria-label={"卖点" + (i + 1)} maxLength={120} value={point} onChange={(e) => brief({ sellingPoints: value.brief.sellingPoints.map((p, j) => (i === j ? e.target.value : p)) })} />
+                                        <button type="button" onClick={() => brief({ sellingPoints: value.brief.sellingPoints.filter((_, j) => i !== j) })}>
+                                            移除
+                                        </button>
+                                    </div>
+                                </label>
+                            ))}
+                            <button type="button" disabled={value.brief.sellingPoints.length >= 5} onClick={() => brief({ sellingPoints: [...value.brief.sellingPoints, ""] })}>
+                                添加卖点
+                            </button>
+                        </div>
+                        {value.brief.goal !== "awareness" && (
+                            <label>
+                                行动号召（CTA）
+                                <input maxLength={80} value={value.brief.cta} onChange={(e) => brief({ cta: e.target.value })} />
                             </label>
-                        ))}
-                        <button type="button" disabled={value.brief.sellingPoints.length >= 5} onClick={() => brief({ sellingPoints: [...value.brief.sellingPoints, ""] })}>
-                            添加卖点
-                        </button>
+                        )}
+                        <label>
+                            目标时长（秒）
+                            <input type="number" min={15} max={30} step={0.001} value={value.brief.durationMs / 1000} onChange={(e) => brief({ durationMs: Math.round(Number(e.target.value) * 1000) })} />
+                        </label>
+                        <label>
+                            品牌名称
+                            <input maxLength={120} value={value.brand.name} onChange={(e) => brand({ name: e.target.value })} />
+                        </label>
+                        <label>
+                            品牌色（选填 #RRGGBB）
+                            <input pattern="#[0-9a-fA-F]{6}" placeholder="#123456" value={value.brand.primaryColor} onChange={(e) => brand({ primaryColor: e.target.value })} />
+                        </label>
                     </div>
-                    <label>
-                        行动号召（CTA）
-                        <input maxLength={80} value={value.brief.cta} onChange={(e) => brief({ cta: e.target.value })} />
-                    </label>
-                    <label>
-                        目标时长（秒）
-                        <input type="number" min={15} max={30} step={0.001} value={value.brief.durationMs / 1000} onChange={(e) => brief({ durationMs: Math.round(Number(e.target.value) * 1000) })} />
-                    </label>
-                    <label>
-                        品牌名称
-                        <input maxLength={120} value={value.brand.name} onChange={(e) => brand({ name: e.target.value })} />
-                    </label>
-                    <label>
-                        品牌色（选填 #RRGGBB）
-                        <input pattern="#[0-9a-fA-F]{6}" placeholder="#123456" value={value.brand.primaryColor} onChange={(e) => brand({ primaryColor: e.target.value })} />
-                    </label>
-                </div>
+                </details>
             </section>
-            <section className="ad-section">
+            <section className="ad-section" hidden={mode === "brief"}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2>分镜脚本</h2>
                     <span>
@@ -75,7 +105,9 @@ export function AdvertisingDraftForm({ value, onChange, disabled = false }: { va
                 {value.shots.map((s, i) => (
                     <article key={s.id} className="ad-shot">
                         <div className="flex flex-wrap gap-2 items-center">
-                            <h3 className="mr-auto">镜头 {i + 1}</h3>
+                            <h3 className="mr-auto">
+                                镜头 {i + 1} · {s.durationMs / 1000} 秒
+                            </h3>
                             <button type="button" aria-label={"镜头" + (i + 1) + "上移"} disabled={i === 0} onClick={() => move(i, -1)}>
                                 上移
                             </button>
@@ -91,6 +123,9 @@ export function AdvertisingDraftForm({ value, onChange, disabled = false }: { va
                                 移除镜头
                             </button>
                         </div>
+                        <p className="text-muted-foreground">
+                            {s.voiceover.trim() ? "含旁白" : "无旁白"} · {s.onScreenText.trim() ? "含屏幕文字" : "无字幕"} · 参考图仅为脚本示意，不是生成视频
+                        </p>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <label>
                                 时长（秒）
@@ -122,7 +157,10 @@ export function AdvertisingDraftForm({ value, onChange, disabled = false }: { va
                                             disabled={!s.referenceResourceIds.includes(id) && s.referenceResourceIds.length >= 5}
                                             onChange={(e) => shot(s.id, { referenceResourceIds: e.target.checked ? [...s.referenceResourceIds, id] : s.referenceResourceIds.filter((r) => r !== id) })}
                                         />
-                                        {id}
+                                        {resources.find((r) => r.id === id)?.available && resources.find((r) => r.id === id)?.mimeType.startsWith("image/") && (
+                                            <img className="ad-reference-image" src={resourceFileUrl(id)} alt={resources.find((r) => r.id === id)?.title || "镜头参考图"} />
+                                        )}
+                                        {resources.find((r) => r.id === id)?.title || id}
                                     </label>
                                 ))
                             )}

@@ -92,13 +92,20 @@ func TestAdvertisingGenerationCopy(t *testing.T) {
 	source, target := open(), open()
 	rows := []any{&model.Project{ID: "project", UserID: "owner", Name: "Ad"}, &model.AdvertisingProject{ProjectID: "project", Revision: 2, DraftJSON: "{}"}, &model.AdvertisingRevision{ID: "confirmed", ProjectID: "project", SourceRevision: 1, SnapshotJSON: "{}"}, &model.Task{ID: "task", UserID: "owner"}, &model.Task{ID: "render", UserID: "owner"}, &model.AdvertisingProduction{ID: "production", ProjectID: "project", ConfirmedRevisionID: "confirmed", Revision: 1, SettingsJSON: "{}"}}
 	taskID := "task"
-	rows = append(rows, &model.AdvertisingSubmission{ID: "submission", ProductionID: "production", ShotID: "shot", Kind: "video", ClientOperationID: "operation", TaskID: &taskID, RequestJSON: "{}", QuoteJSON: "{}"}, &model.AdvertisingAssembly{ID: "assembly", ProductionID: "production", ClientOperationID: "operation", SourceProductionRevision: 1, TimelineJSON: "{\"version\":2}"}, &model.AdvertisingRenderAttempt{ID: "attempt", AssemblyID: "assembly", ClientOperationID: "operation", TaskID: "render"})
+	batchID, index := "batch", 1
+	rows = append(rows, &model.AdvertisingCandidateBatch{ID: batchID, ProductionID: "production", ClientOperationID: "batch-op", ShotID: "shot", Kind: "video", Count: 1, Adjustment: "frozen", RequestHash: "hash"})
+	rows = append(rows, &model.AdvertisingSubmission{ID: "submission", BatchID: &batchID, CandidateIndex: &index, ProductionID: "production", ShotID: "shot", Kind: "video", ClientOperationID: "operation", TaskID: &taskID, RequestJSON: "{}", QuoteJSON: "{}"}, &model.AdvertisingAssembly{ID: "assembly", ProductionID: "production", ClientOperationID: "operation", SourceProductionRevision: 1, TimelineJSON: "{\"version\":2}"}, &model.AdvertisingRenderAttempt{ID: "attempt", AssemblyID: "assembly", ClientOperationID: "operation", TaskID: "render"})
+	rows = append(rows,
+		&model.AdvertisingEvent{ID: "event", ProjectID: "project", ProductionID: "production", EventKey: "review:review", Kind: "assembly_reviewed", ActorID: "owner", DetailsJSON: "{}"},
+		&model.AdvertisingReview{ID: "review", ProductionID: "production", ClientOperationID: "review-op", RequestHash: "request-hash", Checkpoint: "assembly", AssemblyID: "assembly", RenderAttemptID: "attempt", ResourceID: "server-output", ActorID: "owner", Decision: "approve", Reason: "watched", ProductionJSON: "{}"},
+		&model.AdvertisingIssue{ID: "issue", ProductionID: "production", ClientOperationID: "issue-op", RequestHash: "issue-hash", SubmissionID: "submission", ActorID: "owner", Category: "product", Note: "check logo", Revision: 2, Status: "resolved", ResolutionNote: "watched again", ResolvedBy: "owner"},
+	)
 	for _, row := range rows {
 		if err := source.Create(row).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
-	wanted := map[string]bool{"projects": true, "advertising_projects": true, "advertising_revisions": true, "tasks": true, "advertising_productions": true, "advertising_submissions": true, "advertising_assemblies": true, "advertising_render_attempts": true}
+	wanted := map[string]bool{"projects": true, "advertising_projects": true, "advertising_revisions": true, "tasks": true, "advertising_productions": true, "advertising_candidate_batches": true, "advertising_submissions": true, "advertising_assemblies": true, "advertising_render_attempts": true, "advertising_events": true, "advertising_reviews": true, "advertising_issues": true}
 	for _, m := range migrations() {
 		if !wanted[m.name] {
 			continue
@@ -107,6 +114,21 @@ func TestAdvertisingGenerationCopy(t *testing.T) {
 		if err != nil || n < 1 {
 			t.Fatalf("copy %s: %d %v", m.name, n, err)
 		}
+	}
+	var review model.AdvertisingReview
+	if err := target.First(&review, "id = ?", "review").Error; err != nil || review.RenderAttemptID != "attempt" || review.ResourceID != "server-output" || review.ProductionJSON != "{}" {
+		t.Fatalf("copied review identity: %+v %v", review, err)
+	}
+	var issue model.AdvertisingIssue
+	if err := target.First(&issue, "id = ?", "issue").Error; err != nil || issue.Revision != 2 || issue.Status != "resolved" || issue.ResolvedBy != "owner" {
+		t.Fatalf("copied resolution: %+v %v", issue, err)
+	}
+	var member model.AdvertisingSubmission
+	if err := target.First(&member, "id = ?", "submission").Error; err != nil || member.BatchID == nil || *member.BatchID != batchID || member.CandidateIndex == nil || *member.CandidateIndex != 1 {
+		t.Fatalf("copied batch identity: %+v %v", member, err)
+	}
+	if err := target.Delete(&model.AdvertisingCandidateBatch{}, "id = ?", batchID).Error; err == nil {
+		t.Fatal("copied member failed to protect batch")
 	}
 	var got model.AdvertisingAssembly
 	if err := target.First(&got, "id = ?", "assembly").Error; err != nil || got.TimelineJSON != "{\"version\":2}" {

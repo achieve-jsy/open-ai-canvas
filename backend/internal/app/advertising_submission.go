@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,14 +28,16 @@ type advertisingSubmissionInput struct {
 	Request   CreateTaskRequest            `json:"request"`
 }
 type AdvertisingSubmissionDetail struct {
-	ID            string         `json:"id"`
-	ProductionID  string         `json:"productionId"`
-	ShotID        string         `json:"shotId"`
-	Kind          string         `json:"kind"`
-	RequestHash   string         `json:"requestHash"`
-	PublicRequest map[string]any `json:"publicRequest"`
-	Quote         CreationQuote  `json:"quote"`
-	Task          *model.Task    `json:"task,omitempty"`
+	BatchID        *string        `json:"batchId,omitempty"`
+	CandidateIndex *int           `json:"candidateIndex,omitempty"`
+	ID             string         `json:"id"`
+	ProductionID   string         `json:"productionId"`
+	ShotID         string         `json:"shotId"`
+	Kind           string         `json:"kind"`
+	RequestHash    string         `json:"requestHash"`
+	PublicRequest  map[string]any `json:"publicRequest"`
+	Quote          CreationQuote  `json:"quote"`
+	Task           *model.Task    `json:"task,omitempty"`
 }
 type AdvertisingPage[T any] struct {
 	Items    []T   `json:"items"`
@@ -49,7 +50,7 @@ func advertisingConflict(reason, message string) error {
 	return advertisingError(409, kernel.ErrorReason("advertising_"+reason), message)
 }
 func advertisingSubmissionDetail(repo *repository.Repository, userID string, row *model.AdvertisingSubmission) (AdvertisingSubmissionDetail, error) {
-	detail := AdvertisingSubmissionDetail{ID: row.ID, ProductionID: row.ProductionID, ShotID: row.ShotID, Kind: row.Kind, RequestHash: row.RequestHash}
+	detail := AdvertisingSubmissionDetail{ID: row.ID, ProductionID: row.ProductionID, ShotID: row.ShotID, Kind: row.Kind, RequestHash: row.RequestHash, BatchID: row.BatchID, CandidateIndex: row.CandidateIndex}
 	var stored advertisingSubmissionInput
 	if err := json.Unmarshal([]byte(row.RequestJSON), &stored); err != nil {
 		return detail, err
@@ -203,7 +204,19 @@ func (s *Service) advertisingTaskRequest(userID, projectID string, snapshot Adve
 		}
 		config["size"], config["videoSeconds"], config["vquality"] = "9:16", strconv.Itoa(duration), video.DefaultResolution
 		config["videoGenerateAudio"] = strconv.FormatBool(video.GenerateAudio.Default)
-		prompt = fmt.Sprintf("广告分镜模板v1。商品：%s；受众：%s；卖点：%s；行动号召：%s。画面：%s。保持参考商品一致，不生成字幕或文字。", snapshot.Draft.Brief.ProductName, snapshot.Draft.Brief.Audience, strings.Join(snapshot.Draft.Brief.SellingPoints, "；"), snapshot.Draft.Brief.CTA, shot.Visual)
+		parts := []string{"广告分镜模板v1"}
+		for _, item := range []struct{ label, value string }{
+			{"商品", snapshot.Draft.Brief.ProductName},
+			{"受众", snapshot.Draft.Brief.Audience},
+			{"卖点", strings.Join(snapshot.Draft.Brief.SellingPoints, "；")},
+			{"行动号召", snapshot.Draft.Brief.CTA},
+		} {
+			if strings.TrimSpace(item.value) != "" {
+				parts = append(parts, item.label+"："+item.value)
+			}
+		}
+		parts = append(parts, "画面："+shot.Visual, "保持参考商品一致，不添加未经确认的功效、优惠、字幕或文字")
+		prompt = strings.Join(parts, "。") + "。"
 		ids := shot.ReferenceResourceIDs
 		if len(ids) == 0 && len(snapshot.Draft.ProductResourceIDs) > 0 {
 			ids = snapshot.Draft.ProductResourceIDs[:1]
@@ -249,22 +262,10 @@ func (s *Service) PrepareAdvertisingSubmission(userID, projectID, productionID s
 	if err != nil {
 		return result, err
 	}
-	req.advertisingAdmission = &advertisingTaskAdmission{MaxCharge: 1 << 62}
-	task, order, sig, err := s.prepareManagedTask(userID, req)
+	row, err := s.freezeAdvertisingSubmission(userID, productionID, selection, req)
 	if err != nil {
 		return result, err
 	}
-	requestHash := creationHash(req)
-	quote := advertisingQuote(task, order, sig, requestHash, time.Now().UTC().Add(5*time.Minute))
-	requestJSON, err := json.Marshal(advertisingSubmissionInput{Selection: selection, Request: req})
-	if err != nil {
-		return result, err
-	}
-	quoteJSON, err := json.Marshal(quote)
-	if err != nil {
-		return result, err
-	}
-	row := model.AdvertisingSubmission{ID: newID(), ProductionID: productionID, ShotID: selection.ShotID, Kind: selection.Kind, ClientOperationID: selection.ClientOperationID, RequestHash: requestHash, RequestJSON: string(requestJSON), QuoteJSON: string(quoteJSON), PriceSignature: sig, ExpiresAt: quote.ExpiresAt}
 	err = s.repo.AdvertisingProductionTransaction(userID, projectID, productionID, func(repo *repository.Repository) error {
 		fresh, e := repo.AdvertisingSubmissionForOperation(productionID, selection.ClientOperationID)
 		if e == nil {
@@ -274,13 +275,32 @@ func (s *Service) PrepareAdvertisingSubmission(userID, projectID, productionID s
 		if !errors.Is(e, gorm.ErrRecordNotFound) {
 			return e
 		}
-		if e = repo.CreateAdvertisingSubmission(&row); e != nil {
+		if e = repo.CreateAdvertisingSubmission(row); e != nil {
 			return e
 		}
-		result, e = advertisingSubmissionDetail(repo, userID, &row)
+		result, e = advertisingSubmissionDetail(repo, userID, row)
 		return e
 	})
 	return result, advertisingProductionFailure(err)
+}
+func (s *Service) freezeAdvertisingSubmission(userID, productionID string, selection AdvertisingSubmissionRequest, req CreateTaskRequest) (*model.AdvertisingSubmission, error) {
+	req.advertisingAdmission = &advertisingTaskAdmission{MaxCharge: 1 << 62}
+	task, order, sig, err := s.prepareManagedTask(userID, req)
+	if err != nil {
+		return nil, err
+	}
+	requestHash := creationHash(req)
+	quote := advertisingQuote(task, order, sig, requestHash, time.Now().UTC().Add(5*time.Minute))
+	requestJSON, err := json.Marshal(advertisingSubmissionInput{Selection: selection, Request: req})
+	if err != nil {
+		return nil, err
+	}
+	quoteJSON, err := json.Marshal(quote)
+	if err != nil {
+		return nil, err
+	}
+	row := model.AdvertisingSubmission{ID: newID(), ProductionID: productionID, ShotID: selection.ShotID, Kind: selection.Kind, ClientOperationID: selection.ClientOperationID, RequestHash: requestHash, RequestJSON: string(requestJSON), QuoteJSON: string(quoteJSON), PriceSignature: sig, ExpiresAt: quote.ExpiresAt}
+	return &row, nil
 }
 func (s *Service) replayAdvertisingPreparation(userID string, row *model.AdvertisingSubmission, selection AdvertisingSubmissionRequest) (AdvertisingSubmissionDetail, error) {
 	var stored advertisingSubmissionInput
@@ -301,45 +321,12 @@ func (s *Service) ExecuteAdvertisingSubmission(userID, projectID, productionID, 
 	if err != nil {
 		return result, advertisingFailure(err)
 	}
-	detail, err := advertisingSubmissionDetail(s.repo, userID, row)
+	if row.BatchID != nil {
+		return result, advertisingConflict("batch_approval_required", "请明确批准该批全部候选")
+	}
+	prepared, err := s.prepareAdvertisingExecution(userID, row, quoteHash)
 	if err != nil {
 		return result, err
-	}
-	if quoteHash != detail.Quote.QuoteHash {
-		return result, advertisingConflict("quote_changed", "请确认当前报价")
-	}
-	if row.TaskID != nil {
-		return detail, nil
-	}
-	if !row.ExpiresAt.After(time.Now()) {
-		return result, advertisingConflict("quote_expired", "报价已过期，请重新获取并确认")
-	}
-	var stored advertisingSubmissionInput
-	if err := json.Unmarshal([]byte(row.RequestJSON), &stored); err != nil {
-		return result, err
-	}
-	stored.Request.advertisingAdmission = &advertisingTaskAdmission{SubmissionID: id, MaxCharge: detail.Quote.AmountMicrocredits}
-	task, order, sig, err := s.prepareManagedTask(userID, stored.Request)
-	if err != nil {
-		return result, err
-	}
-	if advertisingQuote(task, order, sig, row.RequestHash, row.ExpiresAt).QuoteHash != quoteHash {
-		return result, advertisingConflict("quote_changed", "报价已变化，请重新确认")
-	}
-	var input map[string]any
-	if err := json.Unmarshal([]byte(task.InputJSON), &input); err != nil {
-		return result, err
-	}
-	if err := s.protectTaskSecrets(input); err != nil {
-		return result, err
-	}
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return result, err
-	}
-	task.InputJSON = string(encoded)
-	if order != nil {
-		task.BillingOrderID = order.ID
 	}
 	policy, err := s.RuntimePolicy()
 	if err != nil {
@@ -352,32 +339,32 @@ func (s *Service) ExecuteAdvertisingSubmission(userID, projectID, productionID, 
 		if e != nil {
 			return e
 		}
-		if fresh.TaskID != nil {
-			result, e = advertisingSubmissionDetail(repo, userID, fresh)
-			return e
+		if fresh.TaskID == nil {
+			if e = s.guardAdvertisingActivity(repo, userID, productionID, fresh.ShotID, fresh.Kind); e != nil {
+				return e
+			}
+			if e = validateAdvertisingExecution(repo, fresh, prepared); e != nil {
+				return e
+			}
+			if e = createTaskWithStorageQuotaRepository(repo, prepared.task, prepared.order, policy); e != nil {
+				return e
+			}
+			now := time.Now().UTC()
+			if e = repo.ApproveAdvertisingSubmission(id, prepared.task.ID, now); e != nil {
+				return e
+			}
+			if e = advertisingProductionEvent(repo, userID, projectID, productionID, "admitted:"+id, "submission_admitted", fresh.ShotID, id, "", "", AdvertisingEventDetails{TaskID: prepared.task.ID}); e != nil {
+				return e
+			}
+			fresh.TaskID = &prepared.task.ID
+			fresh.ApprovedAt = &now
 		}
-		if !fresh.ExpiresAt.After(time.Now()) {
-			return advertisingConflict("quote_expired", "报价已过期")
-		}
-		if e = checkCreationPriceSignature(repo, task, sig); e != nil {
-			return advertisingConflict("quote_changed", "报价已变化，请重新确认")
-		}
-		// Retained task history must remain approval-bound even after deleting its advertisement.
-		task.Operation = "advertising_generation"
-		if e = createTaskWithStorageQuotaRepository(repo, task, order, policy); e != nil {
-			return e
-		}
-		now := time.Now().UTC()
-		if e = repo.ApproveAdvertisingSubmission(id, task.ID, now); e != nil {
-			return e
-		}
-		fresh.TaskID = &task.ID
-		fresh.ApprovedAt = &now
 		result, e = advertisingSubmissionDetail(repo, userID, fresh)
 		return e
 	})
 	return result, advertisingProductionFailure(err)
 }
+
 func (s *Service) ListAdvertisingSubmissions(userID, projectID, productionID string, page, size int) (AdvertisingPage[AdvertisingSubmissionDetail], error) {
 	result := AdvertisingPage[AdvertisingSubmissionDetail]{Items: []AdvertisingSubmissionDetail{}, Page: page, PageSize: size}
 	if err := advertisingPagination(page, size); err != nil {

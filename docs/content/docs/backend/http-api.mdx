@@ -11,11 +11,38 @@ description: 信封、错误码与 OpenAPI
 
 原因码：`advertising_revision_conflict`(409)、`advertising_invalid_document`(400)、`advertising_resource_unavailable`(400)、`advertising_resource_in_use`(409)、`advertising_active_tasks`(409)。重名复用`project_name_conflict`。字段限制见OpenAPI；业务流程见[广告项目](./advertising-project)。
 
+## 广告脚本规划
+
+`POST /api/ad-projects/:id/script-plans`提交`{expectedRevision,clientOperationId}`（UUID）；`GET /api/ad-projects/:id/script-plans`获取最新操作，`GET /api/ad-projects/:id/script-plans/:operationId`恢复指定操作。响应`{operationId,sourceRevision,status,draft?,evidence?,uncertainties?,error?}`，状态为`running|ready|blocked|failed`。必须先登录且拥有项目；相同操作键仅返回原结果，超时失败后使用新键。配置`CANVAS_AD_SCRIPT_CHANNEL_ID`和`CANVAS_AD_SCRIPT_MODEL_KEY`指定启用的系统视觉文字模型，未配置时拒绝。仅支持15秒与一张商品图片（最多8MiB）；服务端限制35秒、1200输出token、单用户每日3次、全局每日200次与单用户/项目各1个运行操作。服务端承担规划费用，不创建用户报价、不扣用户积分、不修改已保存草稿；ready候选由用户通过原草稿CAS保存。
+
+模型仅生成三段视觉描述，服务端填写每段5000ms及已有图片引用，不生成未核实的旁白、屏幕文字和购买行动。显式转化目标没有可信落地页字段时直接拒绝；认知目标的CTA留空。候选保留证据与不确定信息，用户需检查画幅及产品事实；旧revision必须重新规划。
+
 ## 广告制作接口
 
 以`/ad-projects/:id/productions`为入口，POST创建/恢复确认版本制作；`/:productionId` GET读取、PATCH整份设置CAS；`/submissions` GET分页、POST报价；`/submissions/:submissionId/execute` POST显式批准；`/assemblies` GET历史、POST组装；`/assemblies/:assemblyId` GET详情；`/assemblies/:assemblyId/renders` GET历史、POST新导出尝试。全部沿用登录、归属、256KiB严格正文及最大100条分页合同。
 
 追加409原因码：`advertising_production_conflict`、`advertising_operation_conflict`、`advertising_submission_mismatch`、`advertising_approval_required`、`advertising_quote_changed`、`advertising_quote_expired`、`advertising_candidate_unavailable`、`advertising_duration_invalid`、`advertising_media_probe_failed`、`advertising_resource_changed`、`advertising_assembly_changed`、`advertising_render_retry_required`。用户跨项目/制作访问返回404。已批准提交重放同任务；旧渲染操作键永不创建新任务。步骤与环境边界见[广告生成与成片](./advertising-generation)。
+
+### 候选批次与恢复
+
+在`/ad-projects/:id/productions/:productionId`下：
+
+- `POST /batches`接受`clientOperationId`、`shotId`、`kind`、`modelId`、`count`（1–3）、`adjustment`（最多1000字符）及可选音色/格式，返回`{batch,items}`；只冻结报价，不调用模型。
+- `GET /batches`分页；携带`clientOperationId`时查询原操作并返回该批详情。`GET /batches/:batchId`读取不可变成员和任务现状。
+- `POST /batches/:batchId/execute`正文`{items:[{submissionId,quoteHash}]}`必须显式批准完整批次；任何成员过期或变价都不接纳该批任务。重复执行恢复原Task，不追加调用。多镜头是不同批次，不承诺全工作台原子事务。
+- `POST /batches/:batchId/close`只关闭未接纳批次，不取消运行任务。`GET /activity`返回不受候选分页影响的未决任务与所属批次。
+
+批次冲突使用`advertising_batch_active`、`advertising_batch_mismatch`或`advertising_batch_closed`、`advertising_batch_approval_required`；其余复用报价、审批及归属错误合同。浏览器响应丢失先查原操作；供应商结果未知须核对原任务，不能换操作键盲重试。已知供应商ID的失败视频可显式查询；媒体恢复沿用原Task、账单及加密检查点，不放宽取消状态或来源验证。
+
+### 审片、问题与制作记录
+
+以下后端接口已通过独立审查，正在接入工作台；完整交互仍待验收：
+
+- `GET /ad-projects/:id/events`按`productionId`、`shotId`、`kind`及分页读取记录。操作者和时间来自服务端；历史任务事实以`fact`标记，不等同人工审片。
+- 在制作路径下，`POST /reviews`提交操作UUID、`expectedProductionRevision`、`checkpoint`、决定和理由。候选批准与采用同事务；拒绝当前采用需`clearSelected`明确清除。成片审片必须指定`assemblyId`、`renderAttemptId`和`resourceId`，服务端核对指定资源是否为该尝试当前可读的真实输出。
+- 成片交付扩展（待整体验收）：原`POST /reviews`使用`checkpoint=delivery`、`decision=approve`及`acceptedReviewId`，其余精确组装/尝试/资源字段与成片审片相同。必须引用有效批准并重查依赖与文件；不创建新渲染。组装响应新增`sourceSettings`、`sources`、`sourceFingerprint`、`current`、`staleReason`和`latestReview`，旧来源缺失不伪装当前。
+- `GET /reviews`读取历史；带`clientOperationId`时恢复原审片及决策时的制作快照。不能用旧操作快照覆盖更高revision的当前设置。
+- `POST /issues`记录候选或指定渲染成片的问题、分类、说明和可选媒体时间点；`PATCH /issues/:issueId`携带`expectedRevision`、状态与复核说明。新候选成功不自动解决旧问题。`GET /issues`分页或按`clientOperationId`恢复原问题。
 
 ## 广告时间线合成
 

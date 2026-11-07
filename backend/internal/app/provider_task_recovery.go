@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"yingce/backend/internal/model"
+	"yingce/backend/internal/protocol"
 	"yingce/backend/internal/repository"
 )
 
@@ -169,8 +170,7 @@ func (s *Service) AdminRecoverVideoByURL(ctx context.Context, actor *model.User,
 	if !strings.HasPrefix(strings.ToLower(payload.mimeType), "video/") {
 		return nil, BadAuthRequest("上游地址返回的不是视频文件")
 	}
-	resultPayload := map[string]interface{}{"mode": "video", "video": map[string]interface{}{"dataUrl": dataURL(payload.mimeType, payload.data), "mimeType": payload.mimeType}}
-	resultPayload, err = s.persistGeneratedMediaResult(task.UserID, resultPayload)
+	resultPayload, err := s.persistTaskMediaReferences(ctx, task, providerConfig{}, "video", []protocol.MediaReference{{DataURL: dataURL(payload.mimeType, payload.data), MIMEType: payload.mimeType}})
 	if err != nil {
 		return nil, err
 	}
@@ -384,11 +384,28 @@ func (s *Service) queryFailedVideoTask(ctx context.Context, task *model.Task, cl
 	// failed/refunded。保留请求值用于审计，但把执行生命周期交给恢复租约控制。
 	recoveryCtx, cancelRecovery := providerTaskRecoveryContext(ctx)
 	defer cancelRecovery()
-	queryCtx := withProviderAnalytics(recoveryCtx, s, *task)
+	queryCtx := context.WithValue(withProviderAnalytics(recoveryCtx, s, *task), mediaExecutionTaskKey{}, *task)
 	var result map[string]interface{}
 	var providerStatus string
 	result, providerStatus, err = queryProtocolAdapterVideoTask(queryCtx, input, adapter, providerRequestID)
 	if err != nil {
+		// Only successfully decoded provider responses carry a terminal status;
+		// transport/HTTP/decode errors carry no status and must not resolve uncertainty.
+		if providerStatus == string(protocol.StatusFailed) || providerStatus == string(protocol.StatusCancelled) {
+			resolved := *task
+			resolved.PollStage, resolved.NextPollAt = providerStatus, nil
+			resolved.Error = safeTaskDiagnosticMessage(err.Error())
+			recordTaskDiagnostic(&resolved, "poll", "provider_"+providerStatus, "accepted", "manual", err)
+			if reconcileErr := s.repo.Transaction(func(repo *repository.Repository) error {
+				if e := repo.SaveFailedTaskProviderResolution(&resolved); e != nil {
+					return e
+				}
+				return newTaskBillingCoordinator(repo).RefundBilling(resolved.BillingOrderID, resolved.Error)
+			}); reconcileErr != nil {
+				// Roll back the terminal diagnostic too: failed reconciliation stays blocked.
+				return nil, errors.Join(err, reconcileErr)
+			}
+		}
 		_ = s.log(task.UserID, task.ID, "error", "人工查询上游视频任务失败", err.Error())
 		return nil, err
 	}
@@ -397,11 +414,12 @@ func (s *Service) queryFailedVideoTask(ctx context.Context, task *model.Task, cl
 		return &ProviderTaskQueryResult{Task: taskForOutput(*task), ProviderStatus: providerStatus, Recovered: false}, nil
 	}
 
-	result, err = s.persistGeneratedMediaResult(task.UserID, result)
+	// The protocol result path saved the encrypted checkpoint under this manual lease.
+	fresh, err := s.repo.Task(task.ID)
 	if err != nil {
-		_ = s.log(task.UserID, task.ID, "error", "人工查询已取得视频，但结果保存失败", err.Error())
 		return nil, err
 	}
+	task.MediaRecoveryJSON, task.MediaStage = fresh.MediaRecoveryJSON, fresh.MediaStage
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		return nil, err

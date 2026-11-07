@@ -18,6 +18,7 @@ import (
 )
 
 type AdvertisingProbedMedia struct {
+	TaskID        string
 	Resource      model.Resource
 	DurationMs    int64
 	Width, Height int
@@ -122,12 +123,25 @@ func buildAdvertisingTimeline(snapshot AdvertisingRevisionDetail, settings Adver
 
 type AdvertisingAssemblyDetail struct {
 	model.AdvertisingAssembly
-	Timeline map[string]any `json:"timeline"`
+	Timeline       map[string]any             `json:"timeline"`
+	SourceSettings *AdvertisingSourceSettings `json:"sourceSettings,omitempty"`
+	Sources        []AdvertisingCutSource     `json:"sources,omitempty"`
+	LatestReview   *model.AdvertisingReview   `json:"latestReview,omitempty"`
+	Current        bool                       `json:"current"`
+	StaleReason    string                     `json:"staleReason,omitempty"`
 }
 
 func advertisingAssemblyDetail(row *model.AdvertisingAssembly) (AdvertisingAssemblyDetail, error) {
 	result := AdvertisingAssemblyDetail{AdvertisingAssembly: *row}
 	err := json.Unmarshal([]byte(row.TimelineJSON), &result.Timeline)
+	if err == nil && row.ProvenanceJSON != nil {
+		var p AdvertisingCutProvenance
+		err = json.Unmarshal([]byte(*row.ProvenanceJSON), &p)
+		if err == nil {
+			result.SourceSettings = &p.SourceSettings
+			result.Sources = p.Sources
+		}
+	}
 	return result, err
 }
 
@@ -154,7 +168,22 @@ func (s *Service) GetAdvertisingAssembly(userID, projectID, productionID, id str
 	if err != nil {
 		return AdvertisingAssemblyDetail{}, advertisingProductionFailure(err)
 	}
-	return advertisingAssemblyDetail(row)
+	detail, err := advertisingAssemblyDetail(row)
+	if err != nil {
+		return detail, err
+	}
+	current, err := s.GetAdvertisingProduction(userID, projectID, productionID)
+	if err != nil {
+		return detail, err
+	}
+	latest, reviewErr := s.repo.LatestAdvertisingAssemblyReview(productionID)
+	if reviewErr == nil {
+		detail.LatestReview = latest
+	} else if !errors.Is(reviewErr, gorm.ErrRecordNotFound) {
+		return detail, reviewErr
+	}
+	detail.Current, detail.StaleReason, err = s.advertisingCutCurrent(s.repo, userID, current, row)
+	return detail, err
 }
 
 func (s *Service) ListAdvertisingAssemblies(userID, projectID, productionID string, page, size int) (AdvertisingPage[AdvertisingAssemblyDetail], error) {
@@ -171,7 +200,7 @@ func (s *Service) ListAdvertisingAssemblies(userID, projectID, productionID stri
 	}
 	result.Total = total
 	for _, row := range rows {
-		item, err := advertisingAssemblyDetail(&row)
+		item, err := s.GetAdvertisingAssembly(userID, projectID, productionID, row.ID)
 		if err != nil {
 			return result, err
 		}
@@ -204,6 +233,9 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 	}
 	if production.Production.Revision != expectedRevision {
 		return result, advertisingProductionFailure(repository.ErrAdvertisingProductionConflict)
+	}
+	if production.Settings.Fit != fit {
+		return result, advertisingConflict("fit_changed", "请先保存选定画幅适配再组装")
 	}
 	media := map[string]AdvertisingProbedMedia{}
 	resources := map[string]model.Resource{}
@@ -244,6 +276,13 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 			if err := probe(item.id, item.kind, resource); err != nil {
 				return result, err
 			}
+			sub, err := s.repo.AdvertisingSubmission(productionID, item.id)
+			if err != nil {
+				return result, err
+			}
+			m := media[item.id]
+			m.TaskID = *sub.TaskID
+			media[item.id] = m
 		}
 	}
 	for _, item := range []struct{ kind, id string }{{"audio", production.Settings.MusicResourceID}, {"image", production.ConfirmedSnapshot.Snapshot.Draft.Brand.LogoResourceID}} {
@@ -262,6 +301,15 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 	if err != nil {
 		return result, err
 	}
+	provenance, err := advertisingCutProvenance(production.ConfirmedSnapshot, production.Settings, media, fit)
+	if err != nil {
+		return result, err
+	}
+	frozen, err := json.Marshal(provenance)
+	if err != nil {
+		return result, err
+	}
+	frozenJSON := string(frozen)
 	signature := creationHash(map[string]any{"revision": expectedRevision, "settings": production.Settings, "media": media, "fit": fit})
 	policy, err := s.RuntimePolicy()
 	if err != nil {
@@ -284,6 +332,14 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 		}
 		if current.Revision != expectedRevision {
 			return repository.ErrAdvertisingProductionConflict
+		}
+		frozenRow := model.AdvertisingAssembly{ProvenanceJSON: &frozenJSON, SourceFingerprint: &provenance.Fingerprint}
+		valid, reason, err := s.advertisingCutCurrent(repo, userID, production, &frozenRow)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return advertisingConflict("resource_changed", reason)
 		}
 		ids := make([]string, 0, len(resources))
 		for id, before := range resources {
@@ -374,14 +430,18 @@ func (s *Service) CreateAdvertisingAssembly(userID, projectID, productionID stri
 		if err != nil {
 			return err
 		}
-		row := model.AdvertisingAssembly{ID: newID(), ProductionID: productionID, ClientOperationID: operationID, SourceProductionRevision: expectedRevision, SelectionHash: signature, TimelineJSON: string(raw), CanvasID: &canvasID, CreatedAt: now, UpdatedAt: now}
+		row := model.AdvertisingAssembly{ID: newID(), ProductionID: productionID, ClientOperationID: operationID, SourceProductionRevision: expectedRevision, SelectionHash: signature, ProvenanceJSON: &frozenJSON, SourceFingerprint: &provenance.Fingerprint, TimelineJSON: string(raw), CanvasID: &canvasID, CreatedAt: now, UpdatedAt: now}
 		if err := repo.CreateAdvertisingAssembly(&row); err != nil {
 			return err
 		}
 		if err := repo.ReplaceAdvertisingReferences(projectID, "assembly:"+row.ID, ids); err != nil {
 			return err
 		}
+		if err := advertisingProductionEvent(repo, userID, projectID, productionID, "assembly:"+row.ID, "assembly_created", "", "", row.ID, "", AdvertisingEventDetails{}); err != nil {
+			return err
+		}
 		result, err = advertisingAssemblyDetail(&row)
+		result.Current = true
 		return err
 	})
 	return result, advertisingProductionFailure(err)

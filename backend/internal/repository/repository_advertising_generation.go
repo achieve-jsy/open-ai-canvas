@@ -132,6 +132,11 @@ func (r *Repository) AdvertisingAssemblyForTask(taskID string) (*model.Advertisi
 	err := r.db.Joins("JOIN advertising_render_attempts ON advertising_render_attempts.assembly_id = advertising_assemblies.id").Where("advertising_render_attempts.task_id = ?", taskID).First(&row).Error
 	return &row, err
 }
+func (r *Repository) HasActiveAdvertisingRender(assembly string) (bool, error) {
+	var count int64
+	err := r.db.Table("advertising_render_attempts r").Joins("LEFT JOIN tasks t ON t.id = r.task_id").Where("r.assembly_id = ? AND (t.id IS NULL OR t.status NOT IN ? OR COALESCE(t.media_recovery_json, '') != '')", assembly, []model.TaskStatus{model.TaskStatusSucceeded, model.TaskStatusFailed, model.TaskStatusCancelled}).Count(&count).Error
+	return count > 0, err
+}
 func (r *Repository) CreateAdvertisingRender(row *model.AdvertisingRenderAttempt) error {
 	return r.db.Omit(clause.Associations).Create(row).Error
 }

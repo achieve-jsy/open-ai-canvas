@@ -3,8 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/goccy/go-yaml"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +34,8 @@ func TestAdvertisingGenerationRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	svc := service.New(repository.New(db), t.TempDir())
+	dataDir := t.TempDir()
+	svc := service.New(repository.New(db), dataDir)
 	router := gin.New()
 	RegisterCanvasAPI(router.Group("/api"), svc)
 	call := func(method, path, body, user string, want int) json.RawMessage {
@@ -79,9 +83,17 @@ func TestAdvertisingGenerationRoutes(t *testing.T) {
 		t.Fatalf("production: %s %v", raw, err)
 	}
 	p := base + "/" + production.Production.ID
+	call("GET", "/ad-projects/"+ad.Project.ID+"/events", "", "owner", 200)
+	call("GET", p+"/reviews", "", "owner", 200)
+	call("GET", p+"/issues", "", "owner", 200)
+	call("POST", p+"/reviews", `{"actorId":"forged"}`, "owner", 400)
+	call("POST", p+"/issues", `{"createdAt":"forged"}`, "owner", 400)
 	routes := []struct{ method, path, body string }{
 		{"POST", base, `{"confirmedRevisionId":"` + confirmed.Snapshot.ID + `"}`},
 		{"GET", p, ""}, {"PATCH", p, `{"expectedRevision":1,"settings":{"selections":{}}}`},
+		{"GET", p + "/batches", ""}, {"GET", p + "/batches/missing", ""}, {"GET", p + "/activity", ""},
+		{"POST", p + "/batches", `{"count":2}`}, {"POST", p + "/batches/missing/execute", `{"items":[]}`},
+		{"POST", p + "/batches/missing/close", `{}`},
 		{"GET", p + "/submissions", ""}, {"POST", p + "/submissions", `{"clientOperationId":"20000000-0000-4000-8000-000000000001","shotId":"10000000-0000-4000-8000-000000000001","kind":"video","modelId":"missing"}`},
 		{"POST", p + "/submissions/missing/execute", `{"quoteHash":"missing"}`},
 		{"GET", p + "/assemblies", ""}, {"POST", p + "/assemblies", `{"expectedRevision":1,"clientOperationId":"20000000-0000-4000-8000-000000000001","fit":"pad"}`},
@@ -128,4 +140,83 @@ func TestAdvertisingGenerationRoutes(t *testing.T) {
 		}
 	}
 	call("POST", p+"/assemblies", `{"expectedRevision":2,"clientOperationId":"20000000-0000-4000-8000-000000000001","fit":"pad"}`, "owner", 409)
+	if err := os.MkdirAll(filepath.Join(dataDir, "resources"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "resources", "review.mp4"), []byte("readability fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	taskID := "review-http-task"
+	for _, row := range []any{
+		&model.Resource{ID: "review-http-media", UserID: "owner", Status: model.ResourceStatusReady, Size: 20, MimeType: "video/mp4", DurationMs: 6000, ObjectKey: "review.mp4", Provider: "local"},
+		&model.Task{ID: taskID, UserID: "owner", ProjectID: ad.Project.ID, Type: "canvas_video", Status: model.TaskStatusSucceeded, ResultJSON: `{"storageKey":"resource:review-http-media"}`},
+		&model.AdvertisingSubmission{ID: "review-http-sub", ProductionID: production.Production.ID, ShotID: draft.Shots[0].ID, Kind: "video", ClientOperationID: "http-sub-op", TaskID: &taskID, ApprovedAt: &now, RequestJSON: "{}", QuoteJSON: "{}"},
+		&model.AdvertisingResourceReference{ProjectID: ad.Project.ID, ScopeKey: "candidate:review-http-sub", ResourceID: "review-http-media"},
+	} {
+		if err := db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	reviewBody := `{"clientOperationId":"30000000-0000-4000-8000-000000000001","expectedProductionRevision":2,"checkpoint":"candidate","submissionId":"review-http-sub","decision":"approve","reason":"watched"}`
+	issueBody := `{"clientOperationId":"30000000-0000-4000-8000-000000000002","submissionId":"review-http-sub","atMs":6000,"category":"product","note":"check logo"}`
+	for _, route := range []struct{ method, path, body string }{
+		{"GET", "/ad-projects/" + ad.Project.ID + "/events", ""}, {"GET", p + "/reviews", ""}, {"GET", p + "/issues", ""},
+		{"POST", p + "/reviews", reviewBody}, {"POST", p + "/issues", issueBody}, {"PATCH", p + "/issues/missing", `{"expectedRevision":1,"status":"resolved","resolutionNote":"checked"}`},
+	} {
+		call(route.method, route.path, route.body, "", 401)
+		call(route.method, route.path, route.body, "other", 404)
+	}
+	first := call("POST", p+"/reviews", reviewBody, "owner", 200)
+	if again := call("POST", p+"/reviews", reviewBody, "owner", 200); string(first) != string(again) {
+		t.Fatal("HTTP replay lost response")
+	}
+	call("GET", p+"/reviews?clientOperationId=30000000-0000-4000-8000-000000000001", "", "owner", 200)
+	call("POST", p+"/reviews", strings.Replace(reviewBody, "watched", "different", 1), "owner", 409)
+	var issue model.AdvertisingIssue
+	if err := json.Unmarshal(call("POST", p+"/issues", issueBody, "owner", 200), &issue); err != nil {
+		t.Fatal(err)
+	}
+	resolution := `{"expectedRevision":1,"status":"resolved","resolutionNote":"checked again"}`
+	call("PATCH", p+"/issues/"+issue.ID, resolution, "owner", 200)
+	call("PATCH", p+"/issues/"+issue.ID, resolution, "owner", 409)
+	call("GET", p+"/issues?clientOperationId=30000000-0000-4000-8000-000000000002", "", "owner", 200)
+	for _, suffix := range []string{"/reviews", "/issues"} {
+		call("GET", p+suffix+"?pageSize=101", "", "owner", 400)
+		call("GET", p+suffix+"?clientOperationId=bad", "", "owner", 400)
+	}
+}
+
+func TestAdvertisingReviewOpenAPI(t *testing.T) {
+	var spec map[string]any
+	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+		t.Fatal(err)
+	}
+	paths := spec["paths"].(map[string]any)
+	for path, methods := range map[string][]string{
+		"/ad-projects/{id}/events":                                      {"get"},
+		"/ad-projects/{id}/productions/{productionId}/reviews":          {"get", "post"},
+		"/ad-projects/{id}/productions/{productionId}/issues":           {"get", "post"},
+		"/ad-projects/{id}/productions/{productionId}/issues/{issueId}": {"patch"},
+	} {
+		item, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatal("missing path", path)
+		}
+		for _, method := range methods {
+			if item[method] == nil {
+				t.Fatal("missing operation", path, method)
+			}
+		}
+	}
+	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
+	for _, name := range []string{"AdvertisingReviewRequest", "AdvertisingReviewResult", "AdvertisingIssueRequest", "AdvertisingIssueResolution", "AdvertisingEventPage"} {
+		if schemas[name] == nil {
+			t.Fatal("missing schema", name)
+		}
+	}
+	request := schemas["AdvertisingReviewRequest"].(map[string]any)
+	if request["additionalProperties"] != false || request["properties"].(map[string]any)["renderAttemptId"] == nil || request["properties"].(map[string]any)["resourceId"] == nil || request["properties"].(map[string]any)["acceptedReviewId"] == nil || len(request["oneOf"].([]any)) != 3 {
+		t.Fatal("missing explicit output binding schema")
+	}
 }

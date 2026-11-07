@@ -87,46 +87,54 @@ export function AdvertisingAssets({ value, onChange, resources, disabled, onBusy
     };
     return (
         <section className="ad-section">
-            <h2>商品与参考素材</h2>
-            <p className="text-muted-foreground">确认至少需要1张商品图。移除绑定不会删除原素材，历史确认引用仍受保护。</p>
+            <h2>你的广告，从这里开始</h2>
+            <p className="text-muted-foreground">AI 脚本：1 张商品图 · 15 秒 · 3 个镜头。PNG / JPEG / WebP，最大 8 MiB。高级手工脚本保留多图。</p>
+            <p className="text-muted-foreground">移除绑定不会删除原素材，历史确认引用仍受保护。</p>
             {error && <p role="alert">{error}</p>}
             {(["productResourceIds", "logo", "additionalResourceIds"] as const).map((target) => (
-                <fieldset key={target} disabled={disabled || busy} className="space-y-2">
-                    <legend>{target === "logo" ? "品牌Logo（1张）" : target === "productResourceIds" ? "商品图（最多10张）" : "附加素材（最多20个）"}</legend>
-                    <div className="flex flex-wrap gap-3">
-                        <button type="button" onClick={() => setPool(target)}>
-                            从素材库选择{target === "logo" ? "Logo" : target === "productResourceIds" ? "商品图" : "附加素材"}
-                        </button>
-                        <label>
-                            上传{target === "logo" ? "Logo" : target === "productResourceIds" ? "商品图" : "附加素材"}
-                            <input
-                                type="file"
-                                accept={allowed(target).join(",")}
-                                onChange={(e) => {
-                                    void upload(target, e.target.files?.[0]);
-                                    e.target.value = "";
-                                }}
-                            />
-                        </label>
-                    </div>
-                    <p className="text-muted-foreground">{target === "additionalResourceIds" ? "PNG / JPEG / WebP / MP4 / MP3 / M4A / WAV" : "PNG / JPEG / WebP"}</p>
-                    <ul className="space-y-2">
-                        {(target === "logo" ? (value.brand.logoResourceId ? [value.brand.logoResourceId] : []) : value[target]).map((id) => {
-                            const resource = resources.find((r) => r.id === id);
-                            return (
-                                <li key={id} className="flex flex-wrap gap-3 items-center break-all">
-                                    <a href={resourceFileUrl(id)} target="_blank" rel="noreferrer">
-                                        {resource?.title || id}
-                                    </a>
-                                    {resource && !resource.available && <span role="status">不可用，请移除或替换</span>}
-                                    <button type="button" onClick={() => remove(target, id)}>
-                                        移除绑定
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </fieldset>
+                <details key={target} open={target === "productResourceIds" ? true : undefined} className="ad-asset-group">
+                    <summary>{target === "productResourceIds" ? "商品图" : "高级素材 · " + (target === "logo" ? "品牌 Logo" : "附加素材")}</summary>
+                    <fieldset disabled={disabled || busy} className="space-y-2">
+                        <legend>{target === "logo" ? "品牌Logo（1张）" : target === "productResourceIds" ? "商品图（最多10张）" : "附加素材（最多20个）"}</legend>
+                        <div className="flex flex-wrap gap-3">
+                            <button type="button" onClick={() => setPool(target)}>
+                                从素材库选择{target === "logo" ? "Logo" : target === "productResourceIds" ? "商品图" : "附加素材"}
+                            </button>
+                            <label>
+                                上传{target === "logo" ? "Logo" : target === "productResourceIds" ? "商品图" : "附加素材"}
+                                <input
+                                    type="file"
+                                    accept={allowed(target).join(",")}
+                                    onChange={(e) => {
+                                        void upload(target, e.target.files?.[0]);
+                                        e.target.value = "";
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        <p className="text-muted-foreground">{target === "additionalResourceIds" ? "PNG / JPEG / WebP / MP4 / MP3 / M4A / WAV" : "PNG / JPEG / WebP"}</p>
+                        <ul className="space-y-2">
+                            {(target === "logo" ? (value.brand.logoResourceId ? [value.brand.logoResourceId] : []) : value[target]).map((id) => {
+                                const resource = resources.find((r) => r.id === id);
+                                return (
+                                    <li key={id} className="flex flex-wrap gap-3 items-center break-all">
+                                        {resource?.available && resource.mimeType.startsWith("image/") && (
+                                            <img className={target === "productResourceIds" ? "ad-product-image" : "ad-reference-image"} src={resourceFileUrl(id)} alt={resource.title || "参考素材"} />
+                                        )}
+                                        {!resource && <span role="status">等待保存并验证服务端素材</span>}
+                                        <a href={resourceFileUrl(id)} target="_blank" rel="noreferrer">
+                                            {resource?.title || id}
+                                        </a>
+                                        {resource && !resource.available && <span role="status">不可用，请移除或替换</span>}
+                                        <button type="button" onClick={() => remove(target, id)}>
+                                            移除绑定
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </fieldset>
+                </details>
             ))}
             {busy && <p role="status">正在上传，请勿离开…</p>}
             {pool && (

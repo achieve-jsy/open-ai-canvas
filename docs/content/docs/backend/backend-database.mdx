@@ -5,6 +5,28 @@ description: 影策后端核心持久化表与状态边界
 
 # 后端数据库
 
+## 广告成片来源与交付（Schema 84，待整体验收）
+
+原生迁移84在`advertising_assemblies`追加可空`provenance_json`和`source_fingerprint`，在`advertising_reviews`追加可空`accepted_review_id`，不修改79–83的迁移校验和。来源保存实际采用的提交/任务/资源、实测尺寸时长、裁剪、音乐与画幅适配；原`selection_hash`不重写，旧行保持NULL并显示来源未知。`fit`保存在原制作SettingsJSON，缺省为pad。
+
+当前性比较实际渲染依赖，不以制作revision大小判断：未采用新候选、默认TTS或未使用的音乐音量不使成片过期。来源资源签名仅存哈希；相同文件换存储位置也保守判为来源变化。交付记录引用同一制作的有效成片批准，检查同组装、渲染尝试、输出文件与当前依赖；同操作回放是历史回执，不保证文件仍可读。此阶段实现及来源排序修复已通过独立审查，隔离Chrome核心流程已通过，最终独立整体复核已通过，用户与目标环境验收仍待完成，未迁移既有预览库。
+
+## 广告审片与问题记录（Schema 83）
+
+原生迁移83新增`advertising_events`、`advertising_reviews`、`advertising_issues`，后端及修复已通过独立审查；工作台整体验收仍待完成，尚未迁移现有预览库。事件按项目和事件键去重，审片与问题按制作和操作键去重，不修改79–82的迁移校验和。
+
+事件和审片为只追加记录，保存服务端操作者、时间、来源版本与受保护对象ID；问题解决使用独立revision和显式复核说明。成片审片额外绑定指定组装、渲染尝试及服务端确认的输出资源；不能仅凭任务成功或最新文件放行。审片保存决策时的制作快照用于幂等回放，该快照不是后续制作设置的最新值。
+
+## 广告候选批次（Schema 82）
+
+原生Go/GORM追加迁移82新增`advertising_candidate_batches`，按`(production_id, client_operation_id)`唯一冻结镜头、视频/旁白类型、1–3候选数量、修改要求与请求指纹，记录批准指纹和关闭时间。`advertising_submissions`新增可空`batch_id`与`candidate_index`，同批成员索引唯一；旧提交保留原Task和媒体引用，不回填虚构批准。
+
+单个候选仍对应一个Task；同镜头批次全部成员验证成功后，在既有制作事务中一起创建Task和账单，失败全部回滚。项目行锁/SQLite写锁串行化不同服务实例的接纳，单项旧入口不能绕过批次保护。结果未知、供应商取消待确认或媒体待保存仍阻止同镜头同类型的新任务。批次加入模型清单、广告删除顺序及SQLite→PostgreSQL复制清单；先删除成员再删除批次，复制时相反。迁移只在临时数据上验证，部署前仍须备份并校验目标库。
+
+## 广告脚本规划（Schema 81）
+
+版本81新增`advertising_script_plans`：按`(project_id, operation_id)`唯一保存归属、来源草稿revision、资源快照、状态与候选；无Task或账务关联。项目删除先检查运行中的规划，再清理规划记录及资源引用。运行超过45秒的操作标记失败，不重放旧操作键；新键需重新受每日与并发预算限制。PG入场事务锁规划表与用户行，SQLite事务使用写锁；PG实例应显式验证迁移和锁行为。
+
 ## 广告制作状态（Schema 80）
 
 版本80追加四表：`advertising_productions`保存确认版本对应的制作设置与独立CAS revision；`advertising_submissions`保存报价、批准及唯一Task关联；`advertising_assemblies`保存不可变时间线与可空画布关联；`advertising_render_attempts`保存每次导出的操作键与唯一Task关联。提交、组装、渲染分别按父ID与client_operation_id唯一，重放记录不被后续尝试覆盖。Task外键RESTRICT，画布删除只将assembly.canvas_id置空。
@@ -21,7 +43,7 @@ description: 影策后端核心持久化表与状态边界
 | advertising_revisions | 不可变确认内容；(project_id,source_revision)唯一 |
 | advertising_resource_references | (project_id,scope_key,resource_id)复合主键；scope_key为draft或确认版本ID，resource_id索引和RESTRICT外键保护媒体；项目父引用也限制删除 |
 
-latest指针由业务事务维护而非循环外键。普通素材删除报告广告占用；彻底删除素材入口和孤儿清理均保留广告草稿及确认版本引用的Resource。广告删除按expectedRevision事务清理自身内容并解绑画布，不删除独立媒体；PostgreSQL低频删除使用NOWAIT任务表锁，锁忙返回409以避免嵌套画布操作死锁。广告页面与确认流程已接线并通过自动验证；新广告ID保留ad_前缀，任务入队在计费前事务校验存在性并与删除锁配对。浏览器联调尚未执行。新库、旧78库升级、重复迁移、快照复制及引用约束有SQLite测试；PostgreSQL测试需显式CANVAS_TEST_POSTGRES_DSN，未配置时跳过，不等同真实PG验收。
+latest指针由业务事务维护而非循环外键。普通素材删除报告广告占用；彻底删除素材入口和孤儿清理均保留广告草稿及确认版本引用的Resource。广告删除按expectedRevision事务清理自身内容并解绑画布，不删除独立媒体；PostgreSQL低频删除使用NOWAIT任务表锁，锁忙返回409以避免嵌套画布操作死锁。广告页面与确认流程已接线并通过自动验证；新广告ID保留ad_前缀，任务入队在计费前事务校验存在性并与删除锁配对。该Schema79阶段原未执行浏览器联调；现五阶段工作台核心流程已通过隔离Chrome，详见待测试中的本轮范围。新库、旧78库升级、重复迁移、快照复制及引用约束有SQLite测试；PostgreSQL测试需显式CANVAS_TEST_POSTGRES_DSN，未配置时跳过，不等同真实PG验收。
 
 ## Agent 记忆文件列补齐（Schema 77）
 

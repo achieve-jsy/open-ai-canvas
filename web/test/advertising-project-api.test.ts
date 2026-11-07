@@ -21,7 +21,24 @@ test("advertising API preserves paths, revisions, cancellation and envelope fail
         await api.listAdvertisingRevisions("ad", 1, 20, signal);
         await api.getAdvertisingRevision("ad", "v/1", signal);
         await api.deleteAdvertisingProject("ad", 3);
-        expect(calls.map((c) => c.url)).toEqual(["/ad-projects", "/ad-projects", "/ad-projects/a%2Fb", "/ad-projects/ad", "/ad-projects/ad/confirm", "/ad-projects/ad/revisions", "/ad-projects/ad/revisions/v%2F1", "/ad-projects/ad"]);
+        await api.createAdvertisingScriptPlan("a/b", { expectedRevision: 4, clientOperationId: "00000000-0000-4000-8000-000000000001" });
+        await api.getAdvertisingScriptPlan("a/b", "op/1", signal);
+        await api.getLatestAdvertisingScriptPlan("a/b", signal);
+        expect(calls.map((c) => c.url)).toEqual([
+            "/ad-projects",
+            "/ad-projects",
+            "/ad-projects/a%2Fb",
+            "/ad-projects/ad",
+            "/ad-projects/ad/confirm",
+            "/ad-projects/ad/revisions",
+            "/ad-projects/ad/revisions/v%2F1",
+            "/ad-projects/ad",
+            "/ad-projects/a%2Fb/script-plans",
+            "/ad-projects/a%2Fb/script-plans/op%2F1",
+            "/ad-projects/a%2Fb/script-plans",
+        ]);
+        expect(JSON.parse(calls[8].data)).toEqual({ expectedRevision: 4, clientOperationId: "00000000-0000-4000-8000-000000000001" });
+        expect(calls[9].signal).toBe(signal);
         expect(JSON.parse(calls[3].data)).toEqual({ name: "Ad", draft, expectedRevision: 1 });
         expect(JSON.parse(calls[4].data)).toEqual({ expectedRevision: 2 });
         expect(calls[7].params).toEqual({ expectedRevision: 3 });

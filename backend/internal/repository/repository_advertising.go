@@ -68,6 +68,13 @@ func (r *Repository) GuardAdvertisingDeletion(userID, id string) (err error) {
 	for _, canvas := range canvases {
 		scopes = append(scopes, canvas.ID)
 	}
+	activePlans, err := r.ActiveAdvertisingPlans(id, time.Now().Add(-45*time.Second))
+	if err != nil {
+		return err
+	}
+	if activePlans > 0 {
+		return ErrProjectHasActiveTasks
+	}
 	for _, scope := range scopes {
 		activity, err := r.CanvasAgentActivity(userID, scope)
 		if err != nil {
@@ -82,16 +89,24 @@ func (r *Repository) GuardAdvertisingDeletion(userID, id string) (err error) {
 
 func (r *Repository) DeleteAdvertisingContent(id string) error {
 	productions := r.db.Model(&model.AdvertisingProduction{}).Select("id").Where("project_id = ?", id)
-	assemblies := r.db.Model(&model.AdvertisingAssembly{}).Select("id").Where("production_id IN (?)", productions)
-	if err := r.db.Where("assembly_id IN (?)", assemblies).Delete(&model.AdvertisingRenderAttempt{}).Error; err != nil {
+	if err := r.db.Where("project_id = ?", id).Delete(&model.AdvertisingEvent{}).Error; err != nil {
 		return err
 	}
-	for _, row := range []any{&model.AdvertisingAssembly{}, &model.AdvertisingSubmission{}} {
+	for _, row := range []any{&model.AdvertisingReview{}, &model.AdvertisingIssue{}} {
 		if err := r.db.Where("production_id IN (?)", productions).Delete(row).Error; err != nil {
 			return err
 		}
 	}
-	for _, row := range []any{&model.AdvertisingResourceReference{}, &model.AdvertisingProduction{}, &model.AdvertisingRevision{}, &model.AdvertisingProject{}} {
+	assemblies := r.db.Model(&model.AdvertisingAssembly{}).Select("id").Where("production_id IN (?)", productions)
+	if err := r.db.Where("assembly_id IN (?)", assemblies).Delete(&model.AdvertisingRenderAttempt{}).Error; err != nil {
+		return err
+	}
+	for _, row := range []any{&model.AdvertisingAssembly{}, &model.AdvertisingSubmission{}, &model.AdvertisingCandidateBatch{}} {
+		if err := r.db.Where("production_id IN (?)", productions).Delete(row).Error; err != nil {
+			return err
+		}
+	}
+	for _, row := range []any{&model.AdvertisingScriptPlan{}, &model.AdvertisingResourceReference{}, &model.AdvertisingProduction{}, &model.AdvertisingRevision{}, &model.AdvertisingProject{}} {
 		if err := r.db.Where("project_id = ?", id).Delete(row).Error; err != nil {
 			return err
 		}

@@ -98,6 +98,15 @@ func TestAdvertisingDraftValidation(t *testing.T) {
 	if err := validateAdvertisingDraft(empty, true); err == nil {
 		t.Fatal("empty draft confirmed")
 	}
+	uncertain := advertisingTestDraft()
+	uncertain.Brief.Goal = "awareness"
+	uncertain.Brief.ProductName = ""
+	uncertain.Brief.Audience = ""
+	uncertain.Brief.SellingPoints = nil
+	uncertain.Brief.CTA = ""
+	if err := validateAdvertisingDraft(uncertain, true); err != nil {
+		t.Fatalf("unverified facts must not be required for confirmation: %v", err)
+	}
 	cases := map[string]func(*AdvertisingDraft){
 		"uuid case duplicate": func(d *AdvertisingDraft) {
 			d.Shots[0].ID = "aaaaaaaa-0000-4000-8000-000000000001"
@@ -114,8 +123,7 @@ func TestAdvertisingDraftValidation(t *testing.T) {
 		"url":           func(d *AdvertisingDraft) { d.ProductResourceIDs = []string{"https://example.com/file"} },
 		"lines":         func(d *AdvertisingDraft) { d.Shots[0].OnScreenText = "a\nb\nc" },
 		"color":         func(d *AdvertisingDraft) { d.Brand.PrimaryColor = "red" },
-		"audience":      func(d *AdvertisingDraft) { d.Brief.Audience = " " },
-		"points":        func(d *AdvertisingDraft) { d.Brief.SellingPoints = []string{} },
+		"goal":          func(d *AdvertisingDraft) { d.Brief.Goal = "unknown" },
 		"shots":         func(d *AdvertisingDraft) { d.Shots = d.Shots[:2] },
 	}
 	for name, mutate := range cases {

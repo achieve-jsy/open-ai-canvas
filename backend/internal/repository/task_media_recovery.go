@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"time"
 
 	"yingce/backend/internal/model"
@@ -8,8 +9,12 @@ import (
 
 // The existing task lease fences every checkpoint write, including after cancellation.
 func (r *Repository) SaveTaskMediaCheckpoint(task *model.Task, encrypted, stage string) error {
+	expected := model.TaskStatusRunning
+	if task.Status == model.TaskStatusFailed && strings.HasPrefix(task.LeaseOwner, "manual-recovery:") {
+		expected = model.TaskStatusFailed
+	}
 	result := taskLeaseWriter(r.db.Model(&model.Task{}), task.LeaseOwner).
-		Where("id = ? AND user_id = ? AND status = ? AND route_run = ?", task.ID, task.UserID, model.TaskStatusRunning, task.RouteRun).
+		Where("id = ? AND user_id = ? AND status = ? AND route_run = ?", task.ID, task.UserID, expected, task.RouteRun).
 		Updates(map[string]any{"media_recovery_json": encrypted, "media_stage": stage, "stage": "作品已生成，正在保存", "updated_at": time.Now()})
 	if result.Error != nil {
 		return result.Error

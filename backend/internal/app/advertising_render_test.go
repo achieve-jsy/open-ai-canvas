@@ -93,6 +93,9 @@ func TestAdvertisingRenderReplay(t *testing.T) {
 	if _, err := s.RetryTask("owner", first.Task.ID); err == nil {
 		t.Fatal("generic retry mutated immutable render attempt")
 	}
+	if err := db.Model(&model.Task{}).Where("id = ?", next.Task.ID).Update("status", model.TaskStatusFailed).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Exec("CREATE TRIGGER fail_attempt BEFORE INSERT ON advertising_render_attempts BEGIN SELECT RAISE(ABORT, 'attempt failed'); END").Error; err != nil {
 		t.Fatal(err)
 	}

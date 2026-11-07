@@ -27,7 +27,19 @@ func TestAdvertisingBrowserServer(t *testing.T) {
 	if dir == "" {
 		t.Skip("run web/scripts/advertising-generation-chrome-e2e.mjs")
 	}
-	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", "127.0.0.1")
+	realKey := os.Getenv("ADVERTISING_REAL_PROVIDER_KEY")
+	real := realKey != ""
+	allowedHosts := "127.0.0.1"
+	if real {
+		allowedHosts += ",aimeter.xk-devops.com"
+	}
+	t.Setenv("CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS", allowedHosts)
+	t.Setenv("CANVAS_AD_SCRIPT_CHANNEL_ID", "test-channel")
+	visionModel, videoModel, videoProtocol := "test-vision", "seedance-test", model.ChannelInterfaceVolcengineArkVideo
+	if real {
+		visionModel, videoModel, videoProtocol = "doubao-seed-2-1-lite", "seedance-2-0-fast", model.ChannelInterfaceType("aimeter-seedance")
+	}
+	t.Setenv("CANVAS_AD_SCRIPT_MODEL_KEY", visionModel)
 	gin.SetMode(gin.TestMode)
 	data := t.TempDir()
 	media := filepath.Join(data, "resources")
@@ -60,10 +72,24 @@ func TestAdvertisingBrowserServer(t *testing.T) {
 	previousRuntime := runtimeService
 	ConfigureRuntime(svc)
 	defer ConfigureRuntime(previousRuntime)
-	var videoCalls, audioCalls atomic.Int64
+	var videoCalls, audioCalls, planCalls atomic.Int64
 	var upstream *httptest.Server
 	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/chat/completions"):
+			planCalls.Add(1)
+			var request struct {
+				Messages []struct {
+					Content json.RawMessage `json:"content"`
+				} `json:"messages"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Messages) == 0 || !strings.Contains(string(request.Messages[len(request.Messages)-1].Content), "image_url") {
+				http.Error(w, "missing product image", http.StatusBadRequest)
+				return
+			}
+			content, _ := json.Marshal(map[string]any{"shots": []map[string]string{{"visual": "Synthetic product pattern enters a clean studio"}, {"visual": "The product pattern turns beside soft daylight"}, {"visual": "The product pattern rests in a clear frame"}}, "evidence": []any{}, "uncertainties": []any{}})
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(content)}}}})
 		case r.URL.Path == "/test.mp4":
 			http.ServeFile(w, r, filepath.Join(media, "test.mp4"))
 		case strings.HasSuffix(r.URL.Path, "/audio/speech"):
@@ -82,12 +108,36 @@ func TestAdvertisingBrowserServer(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	capability := service.DefaultModelCapabilityConfigForModel(string(model.ChannelInterfaceVolcengineArkVideo), "seedance-test")
+	capability := service.DefaultModelCapabilityConfigForModel(string(videoProtocol), videoModel)
+	if real {
+		capability.Video.References.MaxImages = 1
+		capability.Video.References.MaxImageBytes = 10 << 20
+		capability.Video.Duration = service.VideoDurationConfig{Selection: "enum", Values: []int{5}, Default: 5}
+		capability.Video.Ratios, capability.Video.DefaultRatio = []string{"9:16"}, "9:16"
+		capability.Video.Resolutions, capability.Video.DefaultResolution = []string{"480p"}, "480p"
+		capability.Video.DefaultOperation = "image_to_video"
+	}
 	raw, _ := json.Marshal(capability)
+	vision := service.DefaultModelCapabilityConfigForModel(string(model.ChannelInterfaceChatCompletion), "test-vision")
+	vision.Text.References.MaxImages = 1
+	vision.Text.References.MaxImageBytes = 8 << 20
+	visionRaw, _ := json.Marshal(vision)
+	baseURL, apiKey := upstream.URL, "test-not-a-secret"
+	if real {
+		baseURL, apiKey = "https://aimeter.xk-devops.com", realKey
+	}
+	audioChannelID := "test-channel"
+	if real {
+		audioChannelID = "test-audio-channel"
+		if err := db.Create(&model.ModelChannel{ID: audioChannelID, Scope: model.ChannelScopeSystem, Enabled: true, Name: "TEST AUDIO ONLY", BaseURL: upstream.URL, APIKey: "test-not-a-secret", APIFormat: "openai", ModelsJSON: "[]"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, row := range []any{
-		&model.ModelChannel{ID: "test-channel", Scope: model.ChannelScopeSystem, Enabled: true, Name: "TEST ONLY", BaseURL: upstream.URL, APIKey: "test-not-a-secret", APIFormat: "openai", ModelsJSON: "[]"},
-		&model.ChannelModel{ID: "test-video", ChannelID: "test-channel", ModelKey: "seedance-test", DisplayName: "TEST video", Capability: "video", Protocol: model.ChannelInterfaceVolcengineArkVideo, CapabilityConfigJSON: string(raw), BillingMode: "per_second", PriceConfigured: true, Enabled: true},
-		&model.ChannelModel{ID: "test-audio", ChannelID: "test-channel", ModelKey: "tts-1", DisplayName: "TEST TTS", Capability: "audio", Protocol: model.ChannelInterfaceOpenAIAudio, BillingMode: "fixed_request", PriceConfigured: true, Enabled: true},
+		&model.ModelChannel{ID: "test-channel", Scope: model.ChannelScopeSystem, Enabled: true, Name: "TEST ONLY", BaseURL: baseURL, APIKey: apiKey, APIFormat: "openai", ModelsJSON: "[]"},
+		&model.ChannelModel{ID: "test-video", ChannelID: "test-channel", ModelKey: videoModel, DisplayName: "TEST video", Capability: "video", Protocol: videoProtocol, CapabilityConfigJSON: string(raw), BillingMode: "per_second", PriceConfigured: true, Enabled: true},
+		&model.ChannelModel{ID: "test-vision", ChannelID: "test-channel", ModelKey: visionModel, DisplayName: "TEST vision", Capability: "text", Protocol: model.ChannelInterfaceChatCompletion, CapabilityConfigJSON: string(visionRaw), Enabled: true},
+		&model.ChannelModel{ID: "test-audio", ChannelID: audioChannelID, ModelKey: "tts-1", DisplayName: "TEST TTS", Capability: "audio", Protocol: model.ChannelInterfaceOpenAIAudio, BillingMode: "fixed_request", PriceConfigured: true, Enabled: true},
 		&model.ChannelModelPriceTier{ID: "test-video-price", ChannelModelID: "test-video", SelectorKey: "{}", SelectorJSON: "{}", BillingMode: "per_second", UnitPriceMicrocredits: 1, PriceConfigured: true, Enabled: true},
 		&model.ChannelModelPriceTier{ID: "test-audio-price", ChannelModelID: "test-audio", SelectorKey: "{}", SelectorJSON: "{}", BillingMode: "fixed_request", UnitPriceMicrocredits: 10, PriceConfigured: true, Enabled: true},
 	} {
@@ -150,7 +200,13 @@ func TestAdvertisingBrowserServer(t *testing.T) {
 		db.First(&account, "user_id = ?", user.ID)
 		var tasks []model.Task
 		db.Where("user_id = ?", user.ID).Find(&tasks)
-		ok(c, gin.H{"videoCalls": videoCalls.Load(), "audioCalls": audioCalls.Load(), "account": account, "tasks": tasks})
+		var billingOrders int64
+		if err := db.Model(&model.BillingOrder{}).Where("user_id = ?", user.ID).Count(&billingOrders).Error; err != nil {
+			t.Error(err)
+			c.Status(500)
+			return
+		}
+		ok(c, gin.H{"planCalls": planCalls.Load(), "videoCalls": videoCalls.Load(), "audioCalls": audioCalls.Load(), "account": account, "tasks": tasks, "billingOrders": billingOrders})
 	})
 	dist, err := filepath.Abs("../../../web/dist")
 	if err != nil {
@@ -181,7 +237,11 @@ func TestAdvertisingBrowserServer(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "server-url"), []byte(server.URL), 0600); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.NewTimer(8 * time.Minute)
+	limit := 8 * time.Minute
+	if real {
+		limit = 35 * time.Minute
+	}
+	deadline := time.NewTimer(limit)
 	defer deadline.Stop()
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()

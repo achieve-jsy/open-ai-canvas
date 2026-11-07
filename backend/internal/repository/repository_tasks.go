@@ -113,12 +113,16 @@ func (r *Repository) RenewTaskLease(id string, owner string, leaseDuration time.
 	return nil
 }
 
-func (r *Repository) UpdateTaskProviderState(id string, providerRequestID string, pollStage string, nextPollAt *time.Time) error {
+func (r *Repository) UpdateTaskProviderState(id string, providerRequestID string, pollStage string, nextPollAt *time.Time, statuses ...model.TaskStatus) error {
 	updates := map[string]any{"poll_stage": pollStage, "next_poll_at": nextPollAt, "updated_at": time.Now()}
 	if strings.TrimSpace(providerRequestID) != "" {
 		updates["provider_request_id"] = strings.TrimSpace(providerRequestID)
 	}
-	return r.db.Model(&model.Task{}).Where("id = ?", id).Updates(updates).Error
+	query := r.db.Model(&model.Task{}).Where("id = ?", id)
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
+	return query.Updates(updates).Error
 }
 
 func (r *Repository) DeferRunningTaskForProviderPoll(id string, owner string, stage string, delay time.Duration) error {
@@ -158,6 +162,27 @@ func (r *Repository) ClaimFailedTaskProviderRecovery(id string, userID string, o
 	}
 	if result.RowsAffected != 1 {
 		return ErrTaskProviderRecoveryConflict
+	}
+	return nil
+}
+
+// SaveFailedTaskProviderResolution must share a transaction with billing reconciliation.
+// Updating first locks the original task and fences cancellation, retry and lease takeover.
+func (r *Repository) SaveFailedTaskProviderResolution(task *model.Task) error {
+	if task.Status != model.TaskStatusFailed || !strings.HasPrefix(task.LeaseOwner, "manual-recovery:") || (task.PollStage != "failed" && task.PollStage != "cancelled") {
+		return ErrTaskStateConflict
+	}
+	result := taskLeaseWriter(r.db.Model(&model.Task{}), task.LeaseOwner).
+		Where("id = ? AND user_id = ? AND status = ? AND route_run = ? AND billing_order_id = ?", task.ID, task.UserID, model.TaskStatusFailed, task.RouteRun, task.BillingOrderID).
+		Updates(map[string]any{
+			"provider_request_id": task.ProviderRequestID, "poll_stage": task.PollStage, "next_poll_at": nil,
+			"execution_diagnostic_json": task.ExecutionDiagnosticJSON, "error": task.Error, "updated_at": time.Now(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrTaskStateConflict
 	}
 	return nil
 }

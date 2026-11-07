@@ -231,6 +231,174 @@ paths:
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
         "500": {$ref: "#/components/responses/Error"}
+  /ad-projects/{id}/events:
+    get:
+      tags: [projects]
+      summary: 分页读取制作记录与原任务事实
+      description: 仅只读；fact=true为原任务时间戳投影，不代表历史人工验收。按createdAt及id倒序；不返回任务输入、密钥或媒体URL。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: query, name: productionId, schema: {type: string}}
+        - {in: query, name: shotId, schema: {type: string}}
+        - {in: query, name: kind, schema: {type: string}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingEventPage'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/reviews:
+    get:
+      tags: [projects]
+      summary: 读取reviews或按原操作键恢复
+      description: clientOperationId存在时只读恢复原操作；reviews返回原决定及不可变制作快照，issues返回该问题的当前显式复核状态。否则分页。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: query, name: clientOperationId, schema: {type: string, format: uuid}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {oneOf: [{$ref: '#/components/schemas/AdvertisingReviewResult'}, {$ref: '#/components/schemas/AdvertisingReviewPage'}]}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 保存reviews业务决定
+      description: candidate批准与选用原子CAS；拒绝已选用必须clearSelected=true；assembly必须指定renderAttemptId，服务端绑定当前可读成功输出resourceId。expectedProductionRevision为当前版本。 同键同请求幂等；不同请求返回advertising_operation_conflict。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingReviewRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingReviewResult'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/issues:
+    get:
+      tags: [projects]
+      summary: 读取issues或按原操作键恢复
+      description: clientOperationId存在时只读恢复原操作；reviews返回原决定及不可变制作快照，issues返回该问题的当前显式复核状态。否则分页。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: query, name: clientOperationId, schema: {type: string, format: uuid}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {oneOf: [{$ref: '#/components/schemas/AdvertisingIssue'}, {$ref: '#/components/schemas/AdvertisingIssuePage'}]}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 保存issues业务决定
+      description: 目标必须是候选或指定assemblyId及renderAttemptId，不能同时指定。atMs不得超出实际媒体时长。不调用模型；生成成功不会自动解决问题。 同键同请求幂等；不同请求返回advertising_operation_conflict。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingIssueRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingIssue'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/issues/{issueId}:
+    patch:
+      tags: [projects]
+      summary: 显式复核或重新打开问题
+      description: expectedRevision CAS；必填resolutionNote；操作者和时间由服务器写入。冲突返回advertising_issue_conflict。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: issueId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingIssueResolution'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingIssue'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
   /ad-projects/{id}/productions:
     post:
       tags: [projects]
@@ -317,6 +485,170 @@ paths:
         "409": {$ref: '#/components/responses/Error'}
         "500": {$ref: '#/components/responses/Error'}
         "503": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/batches:
+    get:
+      tags: [projects]
+      summary: 查询批次或按原操作键恢复
+      description: clientOperationId 存在时返回原批次详情，否则分页返回批次。超时只查询原操作，不创建新尝试。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: query, name: clientOperationId, schema: {type: string, format: uuid}}
+        - {in: query, name: page, schema: {type: integer, minimum: 1, default: 1}}
+        - {in: query, name: pageSize, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {oneOf: [{$ref: '#/components/schemas/AdvertisingBatchDetail'}, {$ref: '#/components/schemas/AdvertisingBatchPage'}]}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+    post:
+      tags: [projects]
+      summary: 原子冻结一个镜头的1–3个候选报价
+      description: 不创建任务或账单，不调用模型。操作键相同且请求不同返回409；调整最多1000字符，冻结到每个请求中，不修改确认脚本。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingBatchRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingBatchDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/batches/{batchId}:
+    get:
+      tags: [projects]
+      summary: 读取原批次及全部成员
+      description: 包含冻结报价和原Task，无自动重试。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: batchId, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingBatchDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/batches/{batchId}/execute:
+    post:
+      tags: [projects]
+      summary: 显式批准全部冻结成员并原子接纳任务
+      description: items必须与全部冻结成员及quoteHash精确匹配，任何成员过期、变价或额度不足整批不接纳。一个候选一个Task和账单；同一镜头和类型存在活动或待核对任务时拒绝不同批次。成功后重放返回原IDs。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: batchId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingBatchExecuteRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingBatchDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/batches/{batchId}/close:
+    post:
+      tags: [projects]
+      summary: 关闭尚未接纳任务的批次
+      description: 服务器确认没有任务才关闭；不取消已接纳任务。未批准或过期报价不占活动锁。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+        - {in: path, name: batchId, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdvertisingBatchCloseRequest'}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingBatchDetail'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
+  /ad-projects/{id}/productions/{productionId}/activity:
+    get:
+      tags: [projects]
+      summary: 查询制作的全部活动候选
+      description: 不受列表分页限制。包含queued/running、未知提交结果、计费待核对、取消未确认及未完成媒体保存；时间经过不释放歧义。无上游ID需人工核对，有ID显式查询原任务。
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: path, name: productionId, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: 成功信封
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: {type: integer, enum: [0]}
+                  msg: {type: string}
+                  data: {$ref: '#/components/schemas/AdvertisingActivity'}
+        "400": {$ref: '#/components/responses/Error'}
+        "401": {$ref: '#/components/responses/Error'}
+        "404": {$ref: '#/components/responses/Error'}
+        "409": {$ref: '#/components/responses/Error'}
+        "500": {$ref: '#/components/responses/Error'}
   /ad-projects/{id}/productions/{productionId}/submissions:
     get:
       tags: [projects]
@@ -3104,6 +3436,155 @@ components:
       in: cookie
       name: open_ai_canvas_session
   schemas:
+    AdvertisingReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [clientOperationId, expectedProductionRevision, checkpoint, decision, reason]
+      oneOf:
+        - required: [submissionId]
+          properties:
+            checkpoint: {enum: [candidate]}
+          not: {anyOf: [{required: [assemblyId]}, {required: [renderAttemptId]}, {required: [resourceId]}, {required: [acceptedReviewId]}]}
+        - required: [assemblyId, renderAttemptId, resourceId]
+          properties:
+            checkpoint: {enum: [assembly]}
+          not: {anyOf: [{required: [submissionId]}, {required: [clearSelected]}, {required: [acceptedReviewId]}]}
+        - required: [assemblyId, renderAttemptId, resourceId, acceptedReviewId]
+          properties:
+            checkpoint: {enum: [delivery]}
+            decision: {enum: [approve]}
+          not: {anyOf: [{required: [submissionId]}, {required: [clearSelected]}]}
+      properties:
+        clientOperationId: {type: string, format: uuid}
+        expectedProductionRevision: {type: integer, format: int64, minimum: 1}
+        checkpoint: {type: string, enum: [candidate, assembly, delivery]}
+        submissionId: {type: string, minLength: 1}
+        assemblyId: {type: string, minLength: 1}
+        renderAttemptId: {type: string, minLength: 1}
+        resourceId: {type: string, minLength: 1, description: 必须等于服务端指定渲染的当前可读输出}
+        acceptedReviewId: {type: string, minLength: 1, description: 交付引用最新有效成片批准}
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        clearSelected: {type: boolean, description: 仅拒绝候选时可为true；拒绝当前选用时必需}
+    AdvertisingReview:
+      type: object
+      properties:
+        id: {type: string}
+        productionId: {type: string}
+        clientOperationId: {type: string, format: uuid}
+        checkpoint: {type: string, enum: [candidate, assembly, delivery]}
+        submissionId: {type: string}
+        assemblyId: {type: string}
+        renderAttemptId: {type: string}
+        resourceId: {type: string, description: 服务端从指定渲染或候选解析并校验}
+        acceptedReviewId: {type: string, nullable: true}
+        sourceRevision: {type: integer, format: int64}
+        sourceProductionRevision: {type: integer, format: int64}
+        selectionHash: {type: string}
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: string}
+        clearSelected: {type: boolean}
+        actorId: {type: string}
+        createdAt: {type: string, format: date-time}
+    AdvertisingReviewResult:
+      type: object
+      properties:
+        review: {$ref: '#/components/schemas/AdvertisingReview'}
+        production: {$ref: '#/components/schemas/AdvertisingProductionDetail'}
+    AdvertisingIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [clientOperationId, category, note]
+      oneOf:
+        - required: [submissionId]
+          not: {anyOf: [{required: [assemblyId]}, {required: [renderAttemptId]}]}
+        - required: [assemblyId, renderAttemptId]
+          not: {required: [submissionId]}
+      properties:
+        clientOperationId: {type: string, format: uuid}
+        submissionId: {type: string, minLength: 1}
+        assemblyId: {type: string, minLength: 1}
+        renderAttemptId: {type: string, minLength: 1}
+        atMs: {type: integer, format: int64, minimum: 0, description: 不得超出目标媒体实际时长}
+        category: {type: string, minLength: 1, maxLength: 24}
+        note: {type: string, minLength: 1, maxLength: 2000}
+    AdvertisingIssueResolution:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, status, resolutionNote]
+      properties:
+        expectedRevision: {type: integer, format: int64, minimum: 1}
+        status: {type: string, enum: [open, resolved]}
+        resolutionNote: {type: string, minLength: 1, maxLength: 2000}
+    AdvertisingIssue:
+      type: object
+      properties:
+        id: {type: string}
+        productionId: {type: string}
+        clientOperationId: {type: string, format: uuid}
+        submissionId: {type: string}
+        assemblyId: {type: string}
+        renderAttemptId: {type: string}
+        atMs: {type: integer, format: int64}
+        category: {type: string}
+        note: {type: string}
+        actorId: {type: string}
+        revision: {type: integer, format: int64}
+        status: {type: string, enum: [open, resolved]}
+        resolutionNote: {type: string}
+        resolvedBy: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    AdvertisingEvent:
+      type: object
+      properties:
+        id: {type: string}
+        projectId: {type: string}
+        productionId: {type: string}
+        shotId: {type: string}
+        kind: {type: string}
+        actorId: {type: string}
+        sourceRevision: {type: integer, format: int64}
+        productionRevision: {type: integer, format: int64}
+        submissionId: {type: string}
+        assemblyId: {type: string}
+        renderAttemptId: {type: string}
+        createdAt: {type: string, format: date-time}
+        fact: {type: boolean}
+        details:
+          type: object
+          additionalProperties: false
+          properties:
+            taskId: {type: string}
+            reviewId: {type: string}
+            issueId: {type: string}
+            decision: {type: string}
+            status: {type: string}
+            category: {type: string}
+            note: {type: string}
+            atMs: {type: integer, format: int64}
+            selection: {$ref: '#/components/schemas/AdvertisingSelection'}
+    AdvertisingReviewPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingReview'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        pageSize: {type: integer}
+    AdvertisingIssuePage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingIssue'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        pageSize: {type: integer}
+    AdvertisingEventPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingEvent'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        pageSize: {type: integer}
     AdvertisingProductionCreate:
       type: object
       additionalProperties: false
@@ -3121,6 +3602,7 @@ components:
       type: object
       additionalProperties: false
       properties:
+        fit: {type: string, enum: [pad, crop], default: pad}
         ttsModelId: {type: string, maxLength: 120}
         voiceId: {type: string, maxLength: 120}
         selections: {type: object, additionalProperties: {$ref: '#/components/schemas/AdvertisingSelection'}}
@@ -3147,6 +3629,71 @@ components:
             updatedAt: {type: string, format: date-time}
         settings: {$ref: '#/components/schemas/AdvertisingProductionSettings'}
         confirmedSnapshot: {$ref: '#/components/schemas/AdvertisingRevisionDetail'}
+    AdvertisingBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [clientOperationId, shotId, kind, modelId, count]
+      properties:
+        clientOperationId: {type: string, format: uuid}
+        shotId: {type: string, format: uuid}
+        kind: {type: string, enum: [video, audio]}
+        modelId: {type: string, maxLength: 120}
+        voiceId: {type: string, maxLength: 120}
+        format: {type: string, enum: ['', mp3, wav]}
+        count: {type: integer, minimum: 1, maximum: 3}
+        adjustment: {type: string, maxLength: 1000}
+    AdvertisingBatchExecuteRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: object
+            additionalProperties: false
+            required: [submissionId, quoteHash]
+            properties:
+              submissionId: {type: string}
+              quoteHash: {type: string}
+    AdvertisingBatchCloseRequest:
+      type: object
+      additionalProperties: false
+    AdvertisingCandidateBatch:
+      type: object
+      properties:
+        id: {type: string}
+        productionId: {type: string}
+        clientOperationId: {type: string, format: uuid}
+        shotId: {type: string}
+        kind: {type: string, enum: [video, audio]}
+        count: {type: integer, minimum: 1, maximum: 3}
+        adjustment: {type: string, maxLength: 1000}
+        requestHash: {type: string}
+        approvedAt: {type: string, format: date-time}
+        approvalHash: {type: string, description: 全部有序submissionId及quoteHash的不可变指纹}
+        closedAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    AdvertisingBatchDetail:
+      type: object
+      properties:
+        batch: {$ref: '#/components/schemas/AdvertisingCandidateBatch'}
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingSubmissionDetail'}}
+    AdvertisingBatchPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingBatchDetail'}}
+        page: {type: integer}
+        pageSize: {type: integer}
+        total: {type: integer, format: int64}
+    AdvertisingActivity:
+      type: object
+      properties:
+        batches: {type: array, items: {$ref: '#/components/schemas/AdvertisingCandidateBatch'}}
+        items: {type: array, items: {$ref: '#/components/schemas/AdvertisingSubmissionDetail'}}
     AdvertisingSubmissionRequest:
       type: object
       additionalProperties: false
@@ -3178,6 +3725,8 @@ components:
     AdvertisingSubmissionDetail:
       type: object
       properties:
+        batchId: {type: string, description: 历史单项无此字段}
+        candidateIndex: {type: integer, minimum: 1, maximum: 3}
         id: {type: string}
         productionId: {type: string}
         shotId: {type: string}
@@ -3211,7 +3760,31 @@ components:
         productionId: {type: string}
         clientOperationId: {type: string, format: uuid}
         sourceProductionRevision: {type: integer, format: int64}
-        selectionHash: {type: string}
+        selectionHash: {type: string, description: 原不可变选择哈希，不作为当前性判断}
+        sourceFingerprint: {type: string, nullable: true, description: 仅实际渲染依赖；历史记录可缺省}
+        current: {type: boolean, description: 服务端重新校验实际依赖及资源可读性}
+        staleReason: {type: string}
+        latestReview: {$ref: '#/components/schemas/AdvertisingReview'}
+        sourceSettings:
+          type: object
+          readOnly: true
+          properties:
+            selections: {type: object, additionalProperties: {$ref: '#/components/schemas/AdvertisingSelection'}}
+            musicResourceId: {type: string}
+            musicVolume: {type: number}
+            fit: {type: string, enum: [pad, crop]}
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              key: {type: string}
+              taskId: {type: string}
+              resourceId: {type: string}
+              signature: {type: string}
+              durationMs: {type: integer, format: int64}
+              width: {type: integer}
+              height: {type: integer}
         timeline: {$ref: '#/components/schemas/TimelineRenderProject'}
         canvasId: {type: string, description: 画布删除后省略，不影响原组装}
         createdAt: {type: string, format: date-time}

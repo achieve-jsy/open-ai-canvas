@@ -330,6 +330,9 @@ func (s *Service) ConfirmAdvertisingProject(userID, id string, expected int64) (
 		if err := repo.CASAdvertisingProject(id, expected, map[string]any{"latest_confirmed_revision_id": version.ID, "revision": expected + 1, "updated_at": now}); err != nil {
 			return err
 		}
+		if err := appendAdvertisingEvent(repo, model.AdvertisingEvent{ProjectID: id, EventKey: "confirmed:" + version.ID, Kind: "script_confirmed", ActorID: userID, SourceRevision: expected, CreatedAt: now}, AdvertisingEventDetails{}); err != nil {
+			return err
+		}
 		result.Snapshot, err = advertisingRevisionDetail(&version)
 		result.CurrentRevision = expected + 1
 		return err

@@ -114,40 +114,45 @@ func recoverProtocolMedia(ctx context.Context, config providerConfig, mode strin
 		return nil, false, nil
 	}
 	task := &executing
-	var err error
-	// Manual video queries retain their existing recovery lease and completion path.
-	if task.Status != model.TaskStatusRunning {
+	if task.Status != model.TaskStatusRunning && !(task.Status == model.TaskStatusFailed && strings.HasPrefix(task.LeaseOwner, "manual-recovery:")) {
 		return nil, false, nil
 	}
+	result, err := s.persistTaskMediaReferences(ctx, task, config, mode, references)
+	return result, true, err
+}
+
+// Both worker delivery and explicitly leased provider recovery preserve the same checkpoint and upload identity.
+func (s *Service) persistTaskMediaReferences(ctx context.Context, task *model.Task, config providerConfig, mode string, references []protocol.MediaReference) (map[string]interface{}, error) {
+	var err error
 	if len(references) == 0 || len(references) > 32 {
-		return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("生成结果数量超过恢复限制")}
+		return nil, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("生成结果数量超过恢复限制")}
 	}
 	if task.MediaRecoveryJSON != "" {
 		result, err := s.resumeTaskMedia(ctx, task)
-		return result, true, err
+		return result, err
 	}
 	checkpoint := &mediaCheckpoint{Mode: mode, StartedAt: time.Now()}
 	for _, reference := range references {
 		if len(reference.URL) > 16_384 {
-			return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("上游媒体地址过长")}
+			return nil, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("上游媒体地址过长")}
 		}
 		item := mediaCheckpointItem{Reference: protocol.MediaReference{URL: reference.URL, MIMEType: reference.MIMEType}}
 		// Inline bytes are staged, never stored as a large base64 DB checkpoint.
 		if reference.DataURL != "" {
 			mimeType, data, decodeErr := decodeProviderDataURL(reference.DataURL)
 			if decodeErr != nil {
-				return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: decodeErr}
+				return nil, &mediaRecoveryError{stage: "checkpoint", cause: decodeErr}
 			}
 			policy, policyErr := s.RuntimePolicy()
 			if policyErr != nil {
-				return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: policyErr}
+				return nil, &mediaRecoveryError{stage: "checkpoint", cause: policyErr}
 			}
 			if int64(len(data)) > min(megabytes(policy.Resource.GeneratedFileMB), mediaStagingBudget) || !strings.HasPrefix(mimeType, mode+"/") {
-				return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("生成文件类型或大小不符合限制")}
+				return nil, &mediaRecoveryError{stage: "checkpoint", cause: errors.New("生成文件类型或大小不符合限制")}
 			}
 			item.TempName, err = s.stageInlineMedia(data)
 			if err != nil {
-				return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: err}
+				return nil, &mediaRecoveryError{stage: "checkpoint", cause: err}
 			}
 			item.MIMEType = mimeType
 			item.Reference.DataURL = ""
@@ -155,10 +160,10 @@ func recoverProtocolMedia(ctx context.Context, config providerConfig, mode strin
 		checkpoint.Items = append(checkpoint.Items, item)
 	}
 	if err := s.saveMediaCheckpoint(task, checkpoint, "download"); err != nil {
-		return nil, true, &mediaRecoveryError{stage: "checkpoint", cause: err}
+		return nil, &mediaRecoveryError{stage: "checkpoint", cause: err}
 	}
 	result, err := s.materializeTaskMedia(ctx, task, config, checkpoint)
-	return result, true, err
+	return result, err
 }
 
 func (s *Service) resumeTaskMedia(ctx context.Context, task *model.Task) (map[string]interface{}, error) {

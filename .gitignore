@@ -64,6 +64,8 @@ assets/prototypes/.*.drawio.bkp
 .playwright-mcp/
 .serena/
 .spec-workflow/
+# Local agent review snapshots, logs and browser evidence.
+.superpowers/
 .vscode/
 camera_language_guide.md
 .superdesign

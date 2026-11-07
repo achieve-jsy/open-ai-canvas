@@ -1,4 +1,243 @@
 /* Advertising workspace: existing semantic tokens, native labelled form controls. */
+/* Editorial stage shell; selection and command roles retain existing product tokens. */
+.ad-workspace:has(.ad-workbench) {
+    overflow: hidden;
+}
+.ad-workspace:has(.ad-workbench) > div {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.ad-workspace:has(.ad-workbench) .app-page-header {
+    position: static;
+    flex-shrink: 0;
+    backdrop-filter: none;
+}
+.ad-workbench {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ad-workspace [hidden] {
+    display: none !important;
+}
+.ad-workspace {
+    scroll-padding-block: var(--space-8) calc(var(--space-24) * 2);
+}
+.ad-workbench button,
+.ad-workbench .ant-btn,
+.ad-workbench input:not([type="checkbox"]),
+.ad-workbench summary {
+    min-height: 2.75rem;
+}
+.ad-workbench :is(button, input, textarea, select, summary, a) {
+    scroll-margin-block: var(--space-6) calc(var(--space-24) * 2);
+}
+.ad-stages {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--space-2);
+    padding-block: var(--space-6);
+    border-bottom: 1px solid var(--border);
+}
+.ad-stages button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    text-align: left;
+    min-width: 0;
+    border-color: transparent !important;
+}
+.ad-stages button[aria-current="step"] {
+    background: var(--control-selected-bg);
+    color: var(--control-selected-fg);
+}
+.ad-stages button[aria-current="step"] .ad-stage-number {
+    color: var(--product-accent-green, var(--accent));
+    border-color: currentColor;
+}
+.ad-stage-number {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: var(--space-8);
+    height: var(--space-8);
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+}
+.ad-stages small,
+.ad-action-bar small {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: var(--fs-caption);
+}
+.ad-workbench-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 15rem;
+    gap: var(--space-7);
+    padding-block: var(--space-6);
+    padding-inline-end: var(--space-2);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-items: start;
+    scroll-padding-block: var(--space-4);
+}
+.ad-stage-content,
+.ad-summary {
+    min-width: 0;
+}
+.ad-stage-content > * + *,
+.ad-summary > * + * {
+    margin-top: var(--space-5);
+}
+.ad-stage-heading h2 {
+    font-size: var(--fs-display);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-block: var(--space-3);
+}
+.ad-stage-heading > p:last-child {
+    color: var(--muted-foreground);
+}
+.ad-eyebrow {
+    color: var(--product-accent-green, var(--accent));
+    font-size: var(--fs-caption);
+    letter-spacing: 0.15em;
+}
+.ad-summary .ad-section h2 {
+    font-size: var(--fs-ui);
+}
+.ad-summary-list > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+.ad-summary p {
+    font-size: var(--fs-ui);
+    overflow-wrap: anywhere;
+}
+.ad-summary-image {
+    width: var(--space-16);
+    height: var(--space-20);
+    object-fit: contain;
+    border-radius: var(--r-sm);
+}
+.ad-brief-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+    gap: var(--space-5);
+    align-items: start;
+}
+.ad-action-bar {
+    --button-primary-bg: var(--product-accent-green, var(--btn-solid-bg));
+    --button-primary-hover-bg: var(--product-accent-green, var(--btn-solid-hover-bg));
+    --button-primary-active-bg: var(--product-accent-green, var(--btn-solid-active-bg));
+    --button-primary-fg: var(--background);
+}
+.ad-product-image {
+    width: 100%;
+    max-height: 16rem;
+    object-fit: contain;
+    background: var(--surface-secondary);
+    border-radius: var(--r-lg);
+}
+.ad-reference-image {
+    width: var(--space-16);
+    height: var(--space-16);
+    object-fit: contain;
+}
+.ad-asset-group > summary {
+    padding-block: var(--space-3);
+    cursor: pointer;
+}
+.ad-action-bar {
+    flex-shrink: 0;
+    /* ponytail: reserve the default compact launcher width; manually dragged overlays remain movable. */
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: var(--space-4);
+    padding-inline-end: 9rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+.ad-workbench .ad-section {
+    padding: var(--space-6);
+}
+.ad-workbench p,
+.ad-workbench li {
+    overflow-wrap: anywhere;
+}
+.ad-workbench input[type="file"] {
+    max-width: 100%;
+    width: 100%;
+}
+@media (max-width: 1360px) {
+    .ad-workbench-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .ad-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-4);
+    }
+    .ad-summary > * + * {
+        margin-top: 0;
+    }
+}
+@media (max-width: 640px) {
+    .ad-stages {
+        gap: 0;
+        padding-block: var(--space-3);
+    }
+    .ad-stages button {
+        flex-direction: column;
+        text-align: center;
+        gap: var(--space-1);
+        padding: var(--space-2) var(--space-1) !important;
+        font-size: var(--fs-caption);
+    }
+    .ad-stages small {
+        display: none;
+    }
+    .ad-workbench-grid {
+        padding-top: var(--space-5);
+    }
+    .ad-stage-heading h2 {
+        font-size: var(--fs-title);
+    }
+    .ad-summary,
+    .ad-brief-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .ad-action-bar {
+        flex-direction: column;
+        align-items: stretch;
+        padding-inline: var(--space-2) 7rem;
+    }
+    .ad-action-bar .ad-actions {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    .ad-action-bar .ad-actions > div > * {
+        width: 100%;
+        height: auto;
+        white-space: normal;
+    }
+    .ad-action-bar > p {
+        display: none;
+    }
+    .ad-workbench .ad-section {
+        padding: var(--space-4);
+    }
+}
+
 .ad-workspace {
     --ad-border: var(--border);
 }
@@ -103,6 +342,11 @@
     border-radius: var(--r-sm);
     background: var(--background);
     color: var(--foreground);
+}
+.ad-candidate-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: var(--space-3);
 }
 .ad-candidate {
     padding: var(--space-3);

@@ -15,7 +15,7 @@ import (
 )
 
 func RegisterAdvertisingProjectRoutes(r *gin.RouterGroup, svc *service.Service) {
-	for _, route := range []struct{ method, path string }{{"GET", "/ad-projects"}, {"POST", "/ad-projects"}, {"GET", "/ad-projects/:id"}, {"PUT", "/ad-projects/:id"}, {"POST", "/ad-projects/:id/confirm"}, {"GET", "/ad-projects/:id/revisions"}, {"GET", "/ad-projects/:id/revisions/:revisionId"}, {"DELETE", "/ad-projects/:id"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/ad-projects"}, {"POST", "/ad-projects"}, {"GET", "/ad-projects/:id"}, {"POST", "/ad-projects/:id/script-plans"}, {"GET", "/ad-projects/:id/script-plans"}, {"GET", "/ad-projects/:id/script-plans/:operationId"}, {"PUT", "/ad-projects/:id"}, {"POST", "/ad-projects/:id/confirm"}, {"GET", "/ad-projects/:id/revisions"}, {"GET", "/ad-projects/:id/revisions/:revisionId"}, {"DELETE", "/ad-projects/:id"}} {
 		r.Handle(route.method, route.path, func(c *gin.Context) {
 			user, err := currentUser(c, svc)
 			if err != nil {
@@ -29,6 +29,15 @@ func RegisterAdvertisingProjectRoutes(r *gin.RouterGroup, svc *service.Service) 
 				var req service.AdvertisingCreateRequest
 				if err = decodeAdvertisingBody(c, &req); err == nil {
 					result, err = svc.CreateAdvertisingProject(user.ID, req)
+				}
+			case strings.HasSuffix(c.FullPath(), "/ad-projects/:id/script-plans/:operationId"):
+				result, err = svc.GetAdvertisingScriptPlan(user.ID, id, c.Param("operationId"))
+			case strings.HasSuffix(c.FullPath(), "/ad-projects/:id/script-plans") && c.Request.Method == http.MethodGet:
+				result, err = svc.LatestAdvertisingScriptPlan(user.ID, id)
+			case strings.HasSuffix(c.FullPath(), "/ad-projects/:id/script-plans") && c.Request.Method == http.MethodPost:
+				var req service.AdvertisingScriptPlanRequest
+				if err = decodeAdvertisingBody(c, &req); err == nil {
+					result, err = svc.CreateAdvertisingScriptPlan(c.Request.Context(), user.ID, id, req)
 				}
 			case c.Request.Method == http.MethodPut:
 				var req service.AdvertisingSaveRequest

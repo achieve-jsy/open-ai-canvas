@@ -48,7 +48,7 @@ func (s *Service) LogAPICall(log model.ApiCallLog) error {
 			next := time.Now().Add(delay)
 			nextPollAt = &next
 		}
-		if err := s.repo.UpdateTaskProviderState(log.TaskID, log.ProviderRequestID, stage, nextPollAt); err != nil {
+		if err := s.repo.UpdateTaskProviderState(log.TaskID, log.ProviderRequestID, stage, nextPollAt, model.TaskStatusQueued, model.TaskStatusRunning); err != nil {
 			// 请求日志本身仍需保留；任务状态可由后续任务收尾或恢复流程
 			// 重建，不能让一次状态写失败掩盖真实的上游调用。
 			stdlog.Printf("provider task state update failed: task_id=%s provider_request_id=%s error=%v", log.TaskID, log.ProviderRequestID, err)
